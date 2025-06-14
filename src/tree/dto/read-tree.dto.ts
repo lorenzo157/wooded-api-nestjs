@@ -1,0 +1,41 @@
+import { ReadDefectTreeDto } from './read-defect-tree.dto';
+
+export class ReadTreeDto {
+  idTree: number;
+  datetime: Date;
+  photoFileName: string | null;
+  cityBlock: number;
+  perimeter: number | null;
+  height: number | null;
+  incline: number | null;
+  treesInTheBlock: number | null;
+  useUnderTheTree: string | null;
+  frequencyUse: number | null;
+  potentialDamage: number | null;
+  isMovable: boolean | null;
+  isRestrictable: boolean | null;
+  isMissing: boolean | null;
+  isDead: boolean | null;
+  exposedRoots: boolean | null;
+  dch: number | null;
+  windExposure: string | null;
+  vigor: string | null;
+  canopyDensity: string | null;
+  growthSpace: string | null;
+  treeValue: string | null;
+  streetMateriality: string | null;
+  risk: number | null;
+  address: string;
+  conflictsNames: string[];
+  readDefectDto: ReadDefectTreeDto[];
+  diseasesNames: string[];
+  interventionsNames: string[];
+  pestsNames: string[];
+  latitude: number;
+  longitude: number;
+  neighborhoodName: string;
+  treeTypeName?: string;
+  gender?: string;
+  species?: string;
+  scientificName?: string;
+}
