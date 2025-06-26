@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Request, UseGuards, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './local/local-auth.guard'; // We'll create this guard to handle login
 import { JwtAuthGuard } from './jwt/jwt-auth.guard'; // Used for protecting routes
@@ -12,18 +13,22 @@ export class AuthController {
 
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  async login(@Request() req) {
-    // req.user is populated with the authenticated user object by the guard
-    const user = req.user; // This is the user object returned by the LocalStrategy
-    const payload = { idUser: user.idUser }; // Create JWT payload
-    const access_token = await this.authService.signPayload(payload); // Sign the JWT token
+  async login(@Request() req, @Res({ passthrough: true }) res: Response) {
+    const user = req.user;
+    const payload = { idUser: user.idUser };
+    const access_token = await this.authService.signPayload(payload);
+
+    // Set JWT as HttpOnly, Secure cookie
+    // res.cookie('access_token', access_token, {
+    //   httpOnly: true,
+    //   secure: true, // set to false if not using HTTPS in dev
+    //   sameSite: 'strict',
+    //   maxAge: 24 * 60 * 60 * 1000, // 1 day
+    // });
+
     return {
-      statusCode: 200,
-      result: {
-        access_token,
-        firstName: user.firstName,
-        idUser: user.idUser,
-      },
+      user,
+      access_token,
     };
   }
 

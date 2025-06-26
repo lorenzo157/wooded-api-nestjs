@@ -140,17 +140,25 @@ export class TreeService {
     entityField: string, // The field name in the relation entity (e.g., 'pest' or 'disease')
     queryRunner: any,
   ) {
-    if (names && names.length > 0) {
+    if (names?.length > 0) {
       for (const name of names) {
-        const entity = await entityRepository.findOne({
+        let entity = await entityRepository.findOne({
           where: { [entityField + 'Name']: name },
         });
 
-        const relation = relationRepository.create({
-          tree: tree,
-          [entityField]: entity, // Dynamically set the field (e.g., 'pest', 'disease')
-        });
-        await queryRunner.manager.save(relationRepository.target, relation);
+        // If entityField is 'disease' or 'pest' and entity does not exist, create it
+        if ((entityField === 'disease' || entityField === 'pest') && !entity) {
+          entity = entityRepository.create({ [`${entityField}Name`]: name });
+          entity = await queryRunner.manager.save(entityRepository.target, entity);
+        }
+
+        if (entity) {
+          const relation = relationRepository.create({
+            tree: tree,
+            [entityField]: entity, // Dynamically set the field (e.g., 'pest', 'disease')
+          });
+          await queryRunner.manager.save(relationRepository.target, relation);
+        }
       }
     }
   }

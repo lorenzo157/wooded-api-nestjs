@@ -3,8 +3,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { urlencoded, json } from 'express';
+import * as cookieParser from 'cookie-parser';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.use(cookieParser());
 
   app.enableCors({
     origin: '*', // or '*' to allow all origins

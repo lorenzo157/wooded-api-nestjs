@@ -37,6 +37,9 @@ export class Users {
   })
   address: string | null;
 
+  @Column('numeric', { name: 'height_meters', precision: 5, scale: 4 })
+  heightMeters: number;
+
   @OneToMany(() => ProjectUser, (projectUser) => projectUser.user)
   projectUsers: ProjectUser[];
 
