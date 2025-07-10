@@ -18,10 +18,10 @@ export class DefectTree {
   @Column('smallint', { name: 'defect_value' })
   defectValue: number;
 
-  @Column('character varying', { name: 'text_defect_value', length: 100 })
+  @Column('character varying', { name: 'text_defect_value', length: 255 })
   textDefectValue: string;
 
-  @Column('smallint', { name: 'branches', nullable: true })
+  @Column('double precision', { name: 'branches', nullable: true })
   branches: number | null;
 
   @ManyToOne(() => Defects, (defects) => defects.defectTrees)

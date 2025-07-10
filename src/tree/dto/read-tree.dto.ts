@@ -38,4 +38,5 @@ export class ReadTreeDto {
   gender?: string;
   species?: string;
   scientificName?: string;
+  treeInfoCollectionTime?: string | null; // Format: HH:mm:ss
 }

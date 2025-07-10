@@ -144,6 +144,9 @@ export class Trees {
   })
   scientificName: string | null;
 
+  @Column('timestamp', { name: 'tree_info_collection_start_time' })
+  treeInfoCollectionStartTime: Date;
+
   @OneToMany(() => ConflictTree, (conflictTree) => conflictTree.tree)
   conflictTrees: ConflictTree[];
 

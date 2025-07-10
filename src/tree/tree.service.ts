@@ -102,7 +102,7 @@ export class TreeService {
       );
       await this.saveManyToManyRelations(pestsNames, this.pestRepository, this.pestTreeRepository, newTree, 'pest', queryRunner);
 
-      if (createDefectsDtos && createDefectsDtos.length > 0) {
+      if (createDefectsDtos?.length > 0) {
         for (const defectDto of createDefectsDtos) {
           const entity = await this.defectRepository.findOne({
             where: { defectName: defectDto.defectName },
@@ -223,6 +223,15 @@ export class TreeService {
     if (!tree) {
       return null;
     }
+    let treeInfoCollectionTime: string | null = null;
+    if (tree.treeInfoCollectionStartTime) {
+      const diffMs = tree.datetime.getTime() - tree.treeInfoCollectionStartTime.getTime();
+      const totalSeconds = Math.floor(diffMs / 1000);
+      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      treeInfoCollectionTime = `${hours}:${minutes}:${seconds}`;
+    }
 
     const readTreeDto: ReadTreeDto = {
       idTree: tree.idTree,
@@ -257,6 +266,7 @@ export class TreeService {
       gender: tree.gender,
       species: tree.species,
       scientificName: tree.scientificName,
+      treeInfoCollectionTime: treeInfoCollectionTime,
       conflictsNames: tree.conflictTrees?.map((conflictTree) => conflictTree.conflict?.conflictName),
       diseasesNames: tree.diseaseTrees?.map((diseaseTree) => diseaseTree.disease?.diseaseName),
       interventionsNames: tree.interventionTrees?.map((interventionTree) => interventionTree.intervention?.interventionName),
@@ -462,7 +472,6 @@ export class TreeService {
     } = createTreeDto;
 
     try {
-      // Find existing tree with all relations
       const existingTree = await queryRunner.manager.findOne(Trees, {
         where: { idTree },
         relations: ['coordinate', 'project', 'conflictTrees', 'diseaseTrees', 'interventionTrees', 'pestTrees', 'defectTrees'],
@@ -534,7 +543,7 @@ export class TreeService {
       await this.saveManyToManyRelations(pestsNames, this.pestRepository, this.pestTreeRepository, updatedTree, 'pest', queryRunner);
 
       // Handle defects
-      if (createDefectsDtos && createDefectsDtos.length > 0) {
+      if (createDefectsDtos?.length > 0) {
         for (const defectDto of createDefectsDtos) {
           const entity = await this.defectRepository.findOne({
             where: { defectName: defectDto.defectName },

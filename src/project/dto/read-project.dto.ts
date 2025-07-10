@@ -4,7 +4,7 @@ export class ReadProjectDto {
   projectDescription: string | null;
   startDate: string;
   endDate: string | null;
-  projectType: boolean;
+  projectType: string;
   cityName: string | null;
   provinceName: string | null;
 }

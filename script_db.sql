@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS users (
     address VARCHAR(50),
     role_id INTEGER NOT NULL,
     city_id INTEGER NOT NULL,
+    password_reset_token VARCHAR(255),
     CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id_role),
     CONSTRAINT fk_city FOREIGN KEY (city_id) REFERENCES cities(id_city),
     CONSTRAINT unique_email UNIQUE (email)
@@ -106,7 +107,7 @@ CREATE TABLE IF NOT EXISTS projects (
     project_description VARCHAR(255),
     start_date DATE NOT NULL,
     end_date DATE,
-    project_type BOOLEAN NOT NULL,
+    project_type VARCHAR(100) NOT NULL,
     city_id INTEGER,
     user_id INTEGER NOT NULL,
     CONSTRAINT fk_city FOREIGN KEY (city_id) REFERENCES cities(id_city),
@@ -159,6 +160,7 @@ CREATE TABLE IF NOT EXISTS unit_work (
 	pruning_root_deflectors INTEGER NOT NULL DEFAULT 0,
     unit_work_id INTEGER,
     campaign_description VARCHAR(100),
+    createAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_project FOREIGN KEY (project_id) REFERENCES projects(id_project),
     CONSTRAINT fk_neighborhood FOREIGN KEY (neighborhood_id) REFERENCES neighborhoods(id_neighborhood),
     CONSTRAINT fk_unit_work FOREIGN KEY (unit_work_id) REFERENCES unit_work(id_unit_work),
@@ -204,6 +206,7 @@ CREATE TABLE IF NOT EXISTS trees (
     street_materiality street_materiality_type,
     risk SMALLINT,
     address VARCHAR(100) NOT NULL,
+    treeInfoCollectionStartTime TIMESTAMP,
     CONSTRAINT fk_neighborhood FOREIGN KEY (neighborhood_id) REFERENCES neighborhoods(id_neighborhood),
     CONSTRAINT fk_project FOREIGN KEY (project_id) REFERENCES projects(id_project),
     CONSTRAINT fk_coordinate FOREIGN KEY (coordinate_id) REFERENCES coordinates(id_coordinate)
@@ -253,7 +256,7 @@ CREATE TABLE IF NOT EXISTS defect_tree (
     defect_id INTEGER NOT NULL,
     defect_value SMALLINT NOT NULL,
     text_defect_value VARCHAR(100) NOT NULL,
-    branches SMALLINT,
+    branches DOUBLE PRECISION,
     CONSTRAINT fk_tree FOREIGN KEY (tree_id) REFERENCES trees(id_tree) ON DELETE CASCADE,
     CONSTRAINT fk_defect FOREIGN KEY (defect_id) REFERENCES defects(id_defect),
     CONSTRAINT unique_tree_defect UNIQUE (tree_id, defect_id)

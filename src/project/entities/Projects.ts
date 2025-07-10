@@ -27,8 +27,8 @@ export class Projects {
   @Column('date', { name: 'end_date', nullable: true })
   endDate: string | null;
 
-  @Column('boolean', { name: 'project_type' })
-  projectType: boolean;
+  @Column('character varying', { name: 'project_type', length: 100 })
+  projectType: string;
 
   @OneToMany(() => ProjectUser, (projectUser) => projectUser.project)
   projectUsers: ProjectUser[];

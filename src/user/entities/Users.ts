@@ -23,6 +23,9 @@ export class Users {
   @Column('character varying', { name: 'password', length: 255 })
   password: string;
 
+  @Column('character varying', { name: 'password_reset_token', length: 255 })
+  passwordResetToken: string;
+
   @Column('character varying', {
     name: 'phonenumber',
     nullable: true,

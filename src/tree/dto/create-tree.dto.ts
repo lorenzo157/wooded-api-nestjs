@@ -2,33 +2,33 @@ import { IsBase64, IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString
 import { ApiProperty } from '@nestjs/swagger';
 import { CreateDefectTreeDto } from './create-defect-tree.dto';
 export class CreateTreeDto {
-  @ApiProperty({ description: 'Name to the tree photo file', required: false })
+  @ApiProperty({ description: 'Name to the tree photo file'})
   @IsOptional()
   @IsString()
   @MaxLength(255)
   photoFileName?: string;
 
-  @ApiProperty({ description: 'Tree photo file', required: false })
+  @ApiProperty({ description: 'Tree photo file'})
   @IsBase64()
   @IsOptional()
   photoFile: string;
 
-  @ApiProperty({ description: 'City block number', required: false })
+  @ApiProperty({ description: 'City block number'})
   @IsOptional()
   @IsNumber()
   cityBlock: number;
 
-  @ApiProperty({ description: 'Perimeter of the tree', required: false })
+  @ApiProperty({ description: 'Perimeter of the tree'})
   @IsOptional()
   @IsNumber()
   perimeter?: number;
 
-  @ApiProperty({ description: 'Height of the tree', required: false })
+  @ApiProperty({ description: 'Height of the tree'})
   @IsOptional()
   @IsNumber()
   height?: number;
 
-  @ApiProperty({ description: 'Incline of the tree', required: false })
+  @ApiProperty({ description: 'Incline of the tree'})
   @IsOptional()
   @IsNumber()
   incline?: number;
@@ -41,38 +41,38 @@ export class CreateTreeDto {
   @IsNumber()
   treesInTheBlock?: number;
 
-  @ApiProperty({ description: 'Use under the tree', required: false })
+  @ApiProperty({ description: 'Use under the tree'})
   @IsOptional()
   @IsString()
   @MaxLength(100)
   useUnderTheTree?: string;
 
-  @ApiProperty({ description: 'Frequency of use', required: false })
+  @ApiProperty({ description: 'Frequency of use'})
   @IsOptional()
   @IsNumber()
   frequencyUse?: number;
 
-  @ApiProperty({ description: 'Potential damage', required: false })
+  @ApiProperty({ description: 'Potential damage' })
   @IsOptional()
   @IsNumber()
   potentialDamage?: number;
 
-  @ApiProperty({ description: 'Is the tree movable?', required: false })
+  @ApiProperty({ description: 'Is the tree movable?'})
   @IsOptional()
   @IsBoolean()
   isMovable?: boolean;
 
-  @ApiProperty({ description: 'Is the tree restrictable?', required: false })
+  @ApiProperty({ description: 'Is the tree restrictable?' })
   @IsOptional()
   @IsBoolean()
   isRestrictable?: boolean;
 
-  @ApiProperty({ description: 'Is the tree missing?', required: false })
+  @ApiProperty({ description: 'Is the tree missing?'})
   @IsOptional()
   @IsBoolean()
   isMissing?: boolean;
 
-  @ApiProperty({ description: 'Is the tree dead?', required: false })
+  @ApiProperty({ description: 'Is the tree dead?'})
   @IsOptional()
   @IsBoolean()
   isDead?: boolean;
@@ -85,7 +85,7 @@ export class CreateTreeDto {
   @IsBoolean()
   exposedRoots?: boolean;
 
-  @ApiProperty({ description: 'DCH value', required: false })
+  @ApiProperty({ description: 'DCH value' })
   @IsOptional()
   @IsNumber()
   dch?: number;
@@ -177,8 +177,20 @@ export class CreateTreeDto {
   @IsNotEmpty()
   projectId: number;
 
-  @ApiProperty({ description: 'Tree Type', required: true })
+  @ApiProperty({ description: 'Tree Type' })
   @IsString()
   @IsOptional()
   treeTypeName?: string;
+
+  @ApiProperty({ description: 'Gender' })
+  @IsString()
+  @IsOptional()
+  gender?: string;
+
+  @ApiProperty({
+    description: 'The date and time when the tree information was collected',
+    example: '2025-07-04T10:00:00Z',
+    required: false,
+  })
+  treeInfoCollectionStartTime?: Date;
 }

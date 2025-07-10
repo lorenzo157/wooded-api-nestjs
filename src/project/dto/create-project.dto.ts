@@ -26,7 +26,7 @@ export class CreateProjectDto {
 
   @ApiProperty({ description: 'Project type', maxLength: 25 })
   @IsBoolean()
-  projectType: boolean;
+  projectType: string;
 
   @IsNumber()
   @IsNotEmpty()
