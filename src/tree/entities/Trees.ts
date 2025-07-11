@@ -21,11 +21,11 @@ export class Trees {
   datetime: Date;
 
   @Column('character varying', {
-    name: 'photo_file_name',
+    name: 'path_photo',
     nullable: true,
     length: 255,
   })
-  photoFileName: string | null;
+  pathPhoto: string | null;
 
   @Column('integer', { name: 'city_block' })
   cityBlock: number;
@@ -45,7 +45,7 @@ export class Trees {
   @Column('character varying', {
     name: 'use_under_the_tree',
     nullable: true,
-    length: 100,
+    length: 255,
   })
   useUnderTheTree: string | null;
 
@@ -118,29 +118,28 @@ export class Trees {
   @Column('smallint', { name: 'risk', nullable: true })
   risk: number | null;
 
-  @Column('character varying', {
+  @Column('text', {
     name: 'address',
-    length: 100,
   })
   address: string;
 
-  @Column('character varying', { name: 'tree_type_name', length: 80 })
+  @Column('character varying', { name: 'tree_type_name', length: 255 })
   treeTypeName: string;
 
-  @Column('character varying', { name: 'gender', nullable: true, length: 80 })
+  @Column('character varying', { name: 'gender', nullable: true, length: 255 })
   gender: string | null;
 
   @Column('character varying', {
     name: 'species',
     nullable: true,
-    length: 80,
+    length: 255,
   })
   species: string | null;
 
   @Column('character varying', {
     name: 'scientific_name',
     nullable: true,
-    length: 80,
+    length: 255,
   })
   scientificName: string | null;
 

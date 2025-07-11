@@ -11,7 +11,7 @@ export class Diseases {
   @Column('character varying', {
     name: 'disease_name',
     unique: true,
-    length: 100,
+    length: 255,
   })
   diseaseName: string;
 

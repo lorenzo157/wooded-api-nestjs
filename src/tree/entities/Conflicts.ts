@@ -11,7 +11,7 @@ export class Conflicts {
   @Column('character varying', {
     name: 'conflict_name',
     unique: true,
-    length: 100,
+    length: 255,
   })
   conflictName: string;
 

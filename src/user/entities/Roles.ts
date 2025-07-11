@@ -12,7 +12,7 @@ export class Roles {
   @Column('character varying', {
     name: 'role_name',
     unique: true,
-    length: 40,
+    length: 255,
   })
   roleName: string;
 

@@ -1,0 +1,69 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17.5-alpine
+    container_name: wooded-postgres-dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DATABASE_APPLICATION_DATABASE}
+      POSTGRES_USER: ${DATABASE_APPLICATION_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_APPLICATION_PASSWORD}
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8'
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./create_database.sql:/create_database.sql
+      - ./trigger_neighborhood.sql:/trigger_neighborhood.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_APPLICATION_USERNAME} -d ${DATABASE_APPLICATION_DATABASE}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NestJS Application (Development Mode)
+  nestjs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: wooded-nestjs-dev
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      # Override specific values for Docker
+      DATABASE_APPLICATION_HOST: postgres # Use PostgreSQL service name
+      NODE_ENV: development # Set to development for local Docker environment
+    volumes:
+      # Mount source code for live reload
+      - .:/usr/src/app
+      - /usr/src/app/node_modules # Prevent overwriting node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: wooded-pgadmin-dev
+    restart: unless-stopped
+    volumes:
+      - ./data/pgadmin-dev:/var/lib/pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@wooded.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+      PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED: 'False'
+    ports:
+      - '5050:80'
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data_dev:
+    driver: local

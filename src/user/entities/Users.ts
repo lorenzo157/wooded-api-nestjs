@@ -11,10 +11,10 @@ export class Users {
   @PrimaryGeneratedColumn({ type: 'integer', name: 'id_user' })
   idUser: number;
 
-  @Column('character varying', { name: 'first_name', length: 50 })
+  @Column('character varying', { name: 'first_name', length: 255 })
   firstName: string;
 
-  @Column('character varying', { name: 'last_name', length: 50 })
+  @Column('character varying', { name: 'last_name', length: 255 })
   lastName: string;
 
   @Column('character varying', { name: 'email', unique: true, length: 255 })
@@ -29,14 +29,13 @@ export class Users {
   @Column('character varying', {
     name: 'phonenumber',
     nullable: true,
-    length: 50,
+    length: 255,
   })
   phoneNumber: string | null;
 
-  @Column('character varying', {
+  @Column('text', {
     name: 'address',
     nullable: true,
-    length: 50,
   })
   address: string | null;
 

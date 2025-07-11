@@ -1,0 +1,12 @@
+{
+  "watch": ["src"],
+  "ext": "ts,js,json",
+  "ignore": ["src/**/*.spec.ts"],
+  "exec": "npm run start:debug",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "legacyWatch": true,
+  "polling": true,
+  "delay": 500
+}

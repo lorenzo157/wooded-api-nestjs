@@ -10,7 +10,7 @@ export class Neighborhoods {
   @PrimaryGeneratedColumn({ type: 'integer', name: 'id_neighborhood' })
   idNeighborhood: number;
 
-  @Column('character varying', { name: 'neighborhood_name', length: 40 })
+  @Column('character varying', { name: 'neighborhood_name', length: 255 })
   neighborhoodName: string;
 
   @Column('integer', { name: 'num_blocks_in_neighborhood' })

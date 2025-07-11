@@ -11,7 +11,7 @@ export class Pests {
   @Column('character varying', {
     name: 'pest_name',
     unique: true,
-    length: 100,
+    length: 255,
   })
   pestName: string;
 

@@ -18,7 +18,7 @@ export class DefectTree {
   @Column('smallint', { name: 'defect_value' })
   defectValue: number;
 
-  @Column('character varying', { name: 'text_defect_value', length: 255 })
+  @Column('text', { name: 'text_defect_value' })
   textDefectValue: string;
 
   @Column('double precision', { name: 'branches', nullable: true })

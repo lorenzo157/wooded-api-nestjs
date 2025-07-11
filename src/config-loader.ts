@@ -10,4 +10,9 @@ export class EnvVars {
   public static s3AccessKey = 'S3_ACCESS_KEY';
   public static s3SecretAccessKey = 'S3_SECRET_ACCESS_KEY';
   public static s3Bucket = 'S3_BUCKET';
+  public static s3Region = 'S3_REGION';
+  // File storage configuration
+  public static fileStorageType = 'FILE_STORAGE_TYPE'; // 's3' or 'local'
+  public static localStoragePath = 'LOCAL_STORAGE_PATH'; // Path for local file storage
+  public static baseUrl = 'BASE_URL'; // Base URL for serving local files
 }

@@ -19,6 +19,7 @@ import { DiseaseTree } from './entities/DiseaseTree';
 import { SimplyReadTreeDto } from './dto/simply-read-tree.dto';
 import { ReadTreeDto } from './dto/read-tree.dto';
 import { S3Service } from '../utils/s3.service';
+import { FileStorageFactory } from '../utils/file-storage.factory';
 import { PATH_TREES_PHOTOS } from '../utils/constants';
 @Injectable()
 export class TreeService {
@@ -37,6 +38,7 @@ export class TreeService {
     @InjectRepository(PestTree) private readonly pestTreeRepository: Repository<PestTree>,
     private readonly projectService: ProjectService,
     private readonly s3Service: S3Service,
+    private readonly fileStorageFactory: FileStorageFactory,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -54,7 +56,6 @@ export class TreeService {
       latitude,
       longitude,
       projectId,
-      photoFileName,
       photoFile,
       ...treeData
     } = createTreeDto;
@@ -68,7 +69,6 @@ export class TreeService {
 
       let newTree = this.treeRepository.create({
         ...treeData,
-        photoFileName,
         coordinate: savedCoordinates,
         neighborhood: null,
         project,
@@ -118,9 +118,13 @@ export class TreeService {
           await queryRunner.manager.save(DefectTree, defectTree);
         }
       }
-      if (photoFile && photoFileName) {
-        const pathFile = `${PATH_TREES_PHOTOS}${photoFileName}`;
-        await this.s3Service.uploadPhotoFile(photoFile, pathFile);
+      if (photoFile) {
+        const pathFile = `${PATH_TREES_PHOTOS}tree_${newTree.idTree}.jpg`;
+        const fileStorageService = this.fileStorageFactory.getFileStorageService();
+        const uploadResult = await fileStorageService.uploadFile(photoFile, pathFile);
+        // Save the returned URL to the tree object
+        newTree.pathPhoto = uploadResult.url;
+        await queryRunner.manager.save(Trees, newTree);
       }
       await queryRunner.commitTransaction();
       return newTree.idTree;
@@ -236,7 +240,7 @@ export class TreeService {
     const readTreeDto: ReadTreeDto = {
       idTree: tree.idTree,
       datetime: tree.datetime,
-      photoFileName: tree.photoFileName,
+      pathPhoto: tree.pathPhoto,
       cityBlock: tree.cityBlock,
       perimeter: tree.perimeter,
       height: tree.height,
@@ -408,7 +412,7 @@ export class TreeService {
       idTree: tree.idTree,
       treeName: tree.treeName,
       datetime: tree.datetime,
-      photoFileName: tree.photoFileName,
+      pathPhoto: tree.pathPhoto,
       cityBlock: tree.cityBlock,
       perimeter: tree.perimeter,
       height: tree.height,
@@ -466,7 +470,6 @@ export class TreeService {
       latitude,
       longitude,
       projectId,
-      photoFileName,
       photoFile,
       ...treeData
     } = createTreeDto;
@@ -496,10 +499,9 @@ export class TreeService {
 
       // Update tree data
       Object.assign(existingTree, treeData);
-      if (photoFile && photoFileName) {
-        await this.s3Service.deleteFile(`${PATH_TREES_PHOTOS}${existingTree.photoFileName}`);
-        existingTree.photoFileName = photoFileName;
-      }
+
+      // Update datetime with current timestamp
+      existingTree.datetime = new Date();
 
       // Save updated tree
       const updatedTree = await queryRunner.manager.save(Trees, existingTree);
@@ -559,9 +561,18 @@ export class TreeService {
           await queryRunner.manager.save(DefectTree, defectTree);
         }
       }
-      if (photoFile && photoFileName) {
-        const pathFile = `${PATH_TREES_PHOTOS}${photoFileName}`;
-        await this.s3Service.uploadPhotoFile(photoFile, pathFile);
+      if (photoFile) {
+        const pathFile = `${PATH_TREES_PHOTOS}tree_${updatedTree.idTree}.jpg`;
+        const fileStorageService = this.fileStorageFactory.getFileStorageService();
+        const uploadResult = await fileStorageService.uploadFile(photoFile, pathFile);
+
+        // Don't save the entire tree object again, just update the pathPhoto column directly
+        await queryRunner.manager.update(Trees, { idTree: updatedTree.idTree }, {
+          pathPhoto: uploadResult.url
+        });
+
+        // Update the local object without triggering a full save
+        updatedTree.pathPhoto = uploadResult.url;
       }
       await queryRunner.commitTransaction();
       return updatedTree.idTree;
@@ -591,9 +602,9 @@ export class TreeService {
       if (tree.coordinate) {
         await queryRunner.manager.remove(tree.coordinate);
       }
-      if (tree.photoFileName) {
-        await this.s3Service.deleteFile(`${PATH_TREES_PHOTOS}${tree.photoFileName}`);
-      }
+
+      await this.s3Service.deleteFile(`${PATH_TREES_PHOTOS}tree_${idTree}.jpg`);
+
       await queryRunner.commitTransaction();
     } catch (error) {
       await queryRunner.rollbackTransaction();
