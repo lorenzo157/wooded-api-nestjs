@@ -10,7 +10,7 @@ export class Cities {
   @PrimaryGeneratedColumn({ type: 'integer', name: 'id_city' })
   idCity: number;
 
-  @Column('character varying', { name: 'city_name', length: 40 })
+  @Column('character varying', { name: 'city_name', length: 255 })
   cityName: string;
 
   @ManyToOne(() => Provinces, (provinces) => provinces.cities)

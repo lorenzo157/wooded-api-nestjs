@@ -11,7 +11,7 @@ export class Defects {
   @Column('character varying', {
     name: 'defect_name',
     unique: true,
-    length: 100,
+    length: 255,
   })
   defectName: string;
 

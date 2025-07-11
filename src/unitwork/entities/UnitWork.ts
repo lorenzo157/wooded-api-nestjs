@@ -80,10 +80,9 @@ export class UnitWork {
   @Column('integer', { name: 'restrict_access', default: () => '0' })
   restrictAccess: number;
 
-  @Column('character varying', {
+  @Column('text', {
     name: 'campaign_description',
     nullable: true,
-    length: 100,
   })
   campaignDescription: string | null;
 

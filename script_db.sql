@@ -6,51 +6,51 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS pests (
     id_pest SERIAL PRIMARY KEY,
-    pest_name VARCHAR(100) NOT NULL,
+    pest_name VARCHAR(255) NOT NULL,
     CONSTRAINT unique_pest_name UNIQUE (pest_name)
 );
 
 CREATE TABLE IF NOT EXISTS conflicts (
     id_conflict SERIAL PRIMARY KEY,
-    conflict_name VARCHAR(100) NOT NULL,
+    conflict_name VARCHAR(255) NOT NULL,
     CONSTRAINT unique_conflict_name UNIQUE (conflict_name)
 );
 
 CREATE TABLE IF NOT EXISTS diseases (
     id_disease SERIAL PRIMARY KEY,
-    disease_name VARCHAR(100) NOT NULL,
+    disease_name VARCHAR(255) NOT NULL,
     CONSTRAINT unique_disease_name UNIQUE (disease_name)
 );
 
 CREATE TABLE IF NOT EXISTS interventions (
     id_intervention SERIAL PRIMARY KEY,
-    intervention_name VARCHAR(100) NOT NULL,
+    intervention_name VARCHAR(255) NOT NULL,
     CONSTRAINT unique_intervention_name UNIQUE (intervention_name)
 );
 
 CREATE TYPE defect_zone_type AS ENUM ('raiz', 'tronco', 'rama');
 CREATE TABLE IF NOT EXISTS defects (
     id_defect SERIAL PRIMARY KEY,
-    defect_name VARCHAR(100) NOT NULL,
+    defect_name VARCHAR(255) NOT NULL,
     defect_zone defect_zone_type NOT NULL,
     CONSTRAINT unique_defect_name UNIQUE (defect_name)
 );
 
 CREATE TABLE IF NOT EXISTS provinces (
     id_province SERIAL PRIMARY KEY,
-    province_name VARCHAR(40) NOT NULL
+    province_name VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS roles (
     id_role SERIAL PRIMARY KEY,
-    role_name VARCHAR(40) NOT NULL,
+    role_name VARCHAR(255) NOT NULL,
     CONSTRAINT unique_role_name UNIQUE (role_name)
 );
 
 CREATE TABLE IF NOT EXISTS permissions (
     id_permission SERIAL PRIMARY KEY,
-    permission_name VARCHAR(40) NOT NULL,
-    permission_description VARCHAR(255),
+    permission_name VARCHAR(255) NOT NULL,
+    permission_description TEXT,
     CONSTRAINT unique_permission_name UNIQUE (permission_name)
 );
 
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS role_permission (
 
 CREATE TABLE IF NOT EXISTS cities (
     id_city SERIAL PRIMARY KEY,
-    city_name VARCHAR(40) NOT NULL,
+    city_name VARCHAR(255) NOT NULL,
     province_id INTEGER NOT NULL,
     CONSTRAINT fk_province FOREIGN KEY (province_id) REFERENCES provinces(id_province)
 );
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS cities (
 
 CREATE TABLE IF NOT EXISTS neighborhoods (
     id_neighborhood SERIAL PRIMARY KEY,
-    neighborhood_name VARCHAR(40) NOT NULL,
+    neighborhood_name VARCHAR(255) NOT NULL,
     num_blocks_in_neighborhood INTEGER NOT NULL,
     city_id INTEGER NOT NULL,
     CONSTRAINT fk_city FOREIGN KEY (city_id) REFERENCES cities(id_city)
@@ -84,13 +84,13 @@ CREATE TABLE IF NOT EXISTS neighborhoods (
 
 CREATE TABLE IF NOT EXISTS users (
     id_user SERIAL PRIMARY KEY,
-    first_name VARCHAR(50) NOT NULL,
-    last_name VARCHAR(50) NOT NULL,
+    first_name VARCHAR(255) NOT NULL,
+    last_name VARCHAR(255) NOT NULL,
     height_meters NUMERIC(5, 4) NOT NULL,
     email VARCHAR(255) NOT NULL,
     password VARCHAR(255) NOT NULL,
-    phoneNumber VARCHAR(50),
-    address VARCHAR(50),
+    phoneNumber VARCHAR(255),
+    address TEXT,
     role_id INTEGER NOT NULL,
     city_id INTEGER NOT NULL,
     password_reset_token VARCHAR(255),
@@ -103,11 +103,11 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS projects (
     id_project SERIAL PRIMARY KEY,
-    project_name VARCHAR(60) NOT NULL,
-    project_description VARCHAR(255),
+    project_name VARCHAR(255) NOT NULL,
+    project_description TEXT,
     start_date DATE NOT NULL,
     end_date DATE,
-    project_type VARCHAR(100) NOT NULL,
+    project_type VARCHAR(255) NOT NULL,
     city_id INTEGER,
     user_id INTEGER NOT NULL,
     CONSTRAINT fk_city FOREIGN KEY (city_id) REFERENCES cities(id_city),
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS unit_work (
 	pruning_power_line_clearing INTEGER NOT NULL DEFAULT 0,
 	pruning_root_deflectors INTEGER NOT NULL DEFAULT 0,
     unit_work_id INTEGER,
-    campaign_description VARCHAR(100),
+    campaign_description TEXT,
     createAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_project FOREIGN KEY (project_id) REFERENCES projects(id_project),
     CONSTRAINT fk_neighborhood FOREIGN KEY (neighborhood_id) REFERENCES neighborhoods(id_neighborhood),
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS trees (
     height NUMERIC(8, 5),
     incline NUMERIC(8, 5),
     trees_in_the_block SMALLINT,
-    use_under_the_tree VARCHAR(100),
+    use_under_the_tree VARCHAR(255),
     frequency_use SMALLINT,
     potential_damage SMALLINT,
     is_movable BOOLEAN,
@@ -196,16 +196,16 @@ CREATE TABLE IF NOT EXISTS trees (
     canopy_density canopy_density_type,
     growth_space growth_space_type,
     tree_value tree_value_type,
-    tree_type_name VARCHAR(80),
-    gender VARCHAR(80),
-    species VARCHAR(80),
-    scientific_name VARCHAR(80),
+    tree_type_name VARCHAR(255),
+    gender VARCHAR(255),
+    species VARCHAR(255),
+    scientific_name VARCHAR(255),
     project_id INTEGER NOT NULL,
     coordinate_id INTEGER NOT NULL,
     neighborhood_id INTEGER,
     street_materiality street_materiality_type,
     risk SMALLINT,
-    address VARCHAR(100) NOT NULL,
+    address TEXT NOT NULL,
     treeInfoCollectionStartTime TIMESTAMP,
     CONSTRAINT fk_neighborhood FOREIGN KEY (neighborhood_id) REFERENCES neighborhoods(id_neighborhood),
     CONSTRAINT fk_project FOREIGN KEY (project_id) REFERENCES projects(id_project),
@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS defect_tree (
     tree_id INTEGER NOT NULL,
     defect_id INTEGER NOT NULL,
     defect_value SMALLINT NOT NULL,
-    text_defect_value VARCHAR(100) NOT NULL,
+    text_defect_value TEXT NOT NULL,
     branches DOUBLE PRECISION,
     CONSTRAINT fk_tree FOREIGN KEY (tree_id) REFERENCES trees(id_tree) ON DELETE CASCADE,
     CONSTRAINT fk_defect FOREIGN KEY (defect_id) REFERENCES defects(id_defect),

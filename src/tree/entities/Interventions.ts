@@ -11,7 +11,7 @@ export class Interventions {
   @Column('character varying', {
     name: 'intervention_name',
     unique: true,
-    length: 100,
+    length: 255,
   })
   interventionName: string;
 

@@ -11,13 +11,12 @@ export class Projects {
   @PrimaryGeneratedColumn({ type: 'integer', name: 'id_project' })
   idProject: number;
 
-  @Column('character varying', { name: 'project_name', length: 60 })
+  @Column('character varying', { name: 'project_name', length: 255 })
   projectName: string;
 
-  @Column('character varying', {
+  @Column('text', {
     name: 'project_description',
     nullable: true,
-    length: 255,
   })
   projectDescription: string | null;
 
@@ -27,7 +26,7 @@ export class Projects {
   @Column('date', { name: 'end_date', nullable: true })
   endDate: string | null;
 
-  @Column('character varying', { name: 'project_type', length: 100 })
+  @Column('character varying', { name: 'project_type', length: 255 })
   projectType: string;
 
   @OneToMany(() => ProjectUser, (projectUser) => projectUser.project)

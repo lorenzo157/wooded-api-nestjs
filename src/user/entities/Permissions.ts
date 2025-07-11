@@ -11,14 +11,13 @@ export class Permissions {
   @Column('character varying', {
     name: 'permission_name',
     unique: true,
-    length: 40,
+    length: 255,
   })
   permissionName: string;
 
-  @Column('character varying', {
+  @Column('text', {
     name: 'permission_description',
     nullable: true,
-    length: 255,
   })
   permissionDescription: string | null;
 
