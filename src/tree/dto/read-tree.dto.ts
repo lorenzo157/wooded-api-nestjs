@@ -3,7 +3,7 @@ import { ReadDefectTreeDto } from './read-defect-tree.dto';
 export class ReadTreeDto {
   idTree: number;
   datetime: Date;
-  photoFileName: string | null;
+  pathPhoto: string | null;
   cityBlock: number;
   perimeter: number | null;
   height: number | null;

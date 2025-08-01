@@ -2,12 +2,6 @@ import { IsBase64, IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString
 import { ApiProperty } from '@nestjs/swagger';
 import { CreateDefectTreeDto } from './create-defect-tree.dto';
 export class CreateTreeDto {
-  @ApiProperty({ description: 'Name to the tree photo file'})
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  photoFileName?: string;
-
   @ApiProperty({ description: 'Tree photo file'})
   @IsBase64()
   @IsOptional()

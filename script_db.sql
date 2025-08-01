@@ -176,7 +176,7 @@ CREATE TYPE street_materiality_type AS ENUM ('tierra', 'mejorado petroleo', 'asf
 CREATE TABLE IF NOT EXISTS trees (
     id_tree SERIAL PRIMARY KEY,
     datetime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    photo_file_name VARCHAR(255),
+    path_photo VARCHAR(255),
     city_block INTEGER,
     perimeter NUMERIC(8, 5),
     height NUMERIC(8, 5),

@@ -54,7 +54,6 @@ export class TreeService {
       latitude,
       longitude,
       projectId,
-      photoFileName,
       photoFile,
       ...treeData
     } = createTreeDto;
@@ -68,7 +67,6 @@ export class TreeService {
 
       let newTree = this.treeRepository.create({
         ...treeData,
-        photoFileName,
         coordinate: savedCoordinates,
         neighborhood: null,
         project,
@@ -118,9 +116,12 @@ export class TreeService {
           await queryRunner.manager.save(DefectTree, defectTree);
         }
       }
-      if (photoFile && photoFileName) {
-        const pathFile = `${PATH_TREES_PHOTOS}${photoFileName}`;
-        await this.s3Service.uploadPhotoFile(photoFile, pathFile);
+      if (photoFile) {
+        const pathFile = `${PATH_TREES_PHOTOS}tree_${newTree.idTree}.jpg`;
+        const responseS3 = await this.s3Service.uploadPhotoFile(photoFile, pathFile);
+        // Save the returned full S3 path to the tree object
+        newTree.pathPhoto = responseS3.Location;  // saving the full S3 path
+        await queryRunner.manager.save(Trees, newTree);
       }
       await queryRunner.commitTransaction();
       return newTree.idTree;
@@ -236,7 +237,7 @@ export class TreeService {
     const readTreeDto: ReadTreeDto = {
       idTree: tree.idTree,
       datetime: tree.datetime,
-      photoFileName: tree.photoFileName,
+      pathPhoto: tree.pathPhoto,
       cityBlock: tree.cityBlock,
       perimeter: tree.perimeter,
       height: tree.height,
@@ -408,7 +409,7 @@ export class TreeService {
       idTree: tree.idTree,
       treeName: tree.treeName,
       datetime: tree.datetime,
-      photoFileName: tree.photoFileName,
+      pathPhoto: tree.pathPhoto,
       cityBlock: tree.cityBlock,
       perimeter: tree.perimeter,
       height: tree.height,
@@ -466,7 +467,6 @@ export class TreeService {
       latitude,
       longitude,
       projectId,
-      photoFileName,
       photoFile,
       ...treeData
     } = createTreeDto;
@@ -496,10 +496,9 @@ export class TreeService {
 
       // Update tree data
       Object.assign(existingTree, treeData);
-      if (photoFile && photoFileName) {
-        await this.s3Service.deleteFile(`${PATH_TREES_PHOTOS}${existingTree.photoFileName}`);
-        existingTree.photoFileName = photoFileName;
-      }
+
+      // Update datetime with current timestamp
+      existingTree.datetime = new Date();
 
       // Save updated tree
       const updatedTree = await queryRunner.manager.save(Trees, existingTree);
@@ -559,9 +558,17 @@ export class TreeService {
           await queryRunner.manager.save(DefectTree, defectTree);
         }
       }
-      if (photoFile && photoFileName) {
-        const pathFile = `${PATH_TREES_PHOTOS}${photoFileName}`;
-        await this.s3Service.uploadPhotoFile(photoFile, pathFile);
+      if (photoFile) {
+        const pathFile = `${PATH_TREES_PHOTOS}tree_${updatedTree.idTree}.jpg`;
+        const responseS3 = await this.s3Service.uploadPhotoFile(photoFile, pathFile);
+
+        // Don't save the entire tree object again, just update the pathPhoto column directly
+        await queryRunner.manager.update(Trees, { idTree: updatedTree.idTree }, {
+          pathPhoto: responseS3.Location
+        });
+
+        // Update the local object without triggering a full save
+        updatedTree.pathPhoto = responseS3.Location;
       }
       await queryRunner.commitTransaction();
       return updatedTree.idTree;
@@ -591,9 +598,9 @@ export class TreeService {
       if (tree.coordinate) {
         await queryRunner.manager.remove(tree.coordinate);
       }
-      if (tree.photoFileName) {
-        await this.s3Service.deleteFile(`${PATH_TREES_PHOTOS}${tree.photoFileName}`);
-      }
+
+      await this.s3Service.deleteFile(`${PATH_TREES_PHOTOS}tree_${idTree}.jpg`);
+
       await queryRunner.commitTransaction();
     } catch (error) {
       await queryRunner.rollbackTransaction();

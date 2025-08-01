@@ -6,12 +6,11 @@ import { EnvVars } from '../config-loader';
 @Injectable()
 export class S3Service {
   private bucketName;
-  private region = 'us-east-1';
   private s3: AWS.S3;
 
   constructor(private readonly configService: ConfigService) {
     AWS.config.update({
-      region: this.region,
+      region: this.configService.get(EnvVars.s3Region),
       accessKeyId: this.configService.get(EnvVars.s3AccessKey),
       secretAccessKey: this.configService.get(EnvVars.s3SecretAccessKey),
     });
