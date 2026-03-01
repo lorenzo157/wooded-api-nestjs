@@ -20,7 +20,7 @@ export const DatabaseProvider: DynamicModule = TypeOrmModule.forRootAsync({
       autoLoadEntities: true,
       synchronize: false, //config.get(EnvVars.enviroment) === 'development',
       migrationsRun: false,
-      logging: true,
+      logging: ['error', 'warn'],
       migrations: [__dirname + '/../../migrations/**/*{.ts,.js}'],
       cli: {
         migrationsDir: '../migrations',

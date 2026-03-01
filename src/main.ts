@@ -1,5 +1,5 @@
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { urlencoded, json } from 'express';
@@ -7,8 +7,20 @@ import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('HTTP');
 
   app.use(cookieParser());
+
+  // Log every request: method, URL, user, and response time
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const user = req.user?.username || req.user?.email || 'anonymous';
+      logger.log(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms - user: ${user}`);
+    });
+    next();
+  });
 
   app.enableCors({
     origin: '*', // or '*' to allow all origins

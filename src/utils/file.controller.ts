@@ -14,10 +14,11 @@ export class FileController {
     this.storagePath = this.configService.get(EnvVars.localStoragePath);
   }
 
-  @Get('*')
-  async serveFile(@Param('0') filePath: string, @Res() res: Response) {
+  @Get('*path')
+  async serveFile(@Param('path') filePath: string[], @Res() res: Response) {
     try {
-      const fullPath = path.join(this.storagePath, filePath);
+      const relativePath = Array.isArray(filePath) ? filePath.join('/') : filePath;
+      const fullPath = path.resolve(process.cwd(), this.storagePath, relativePath);
 
       // Check if file exists
       if (!fs.existsSync(fullPath)) {
@@ -41,6 +42,7 @@ export class FileController {
       const fileStream = fs.createReadStream(fullPath);
       fileStream.pipe(res);
     } catch (error) {
+      console.log("Error serving file:", error)
       if (error instanceof NotFoundException) {
         throw error;
       }
