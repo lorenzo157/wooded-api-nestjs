@@ -636,7 +636,6 @@ export class UnitWorkService {
 
   async savePercentages(treeQty: number, updateDto: ReadUnitWorkDto) {
     this.sampleDataDto.treeQty = treeQty;
-
     this.sampleDataDto.pruningTrainingPercentage = updateDto.pruningTraining / treeQty;
     this.sampleDataDto.pruningSanitaryPercentage = updateDto.pruningSanitary / treeQty;
     this.sampleDataDto.pruningHeightReductionPercentage = updateDto.pruningHeightReduction / treeQty;
@@ -1098,7 +1097,6 @@ export class UnitWorkService {
       .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
       .select('neighborhood.numBlocksInNeighborhood AS "numBlocksInNeighborhood"') // Asegurar el alias correcto
       .getRawOne();
-
     if (!result) {
       throw new Error(`No se encontraron datos para idNeighborhood: ${idNeighborhood}, idProject: ${idProject}`);
     }

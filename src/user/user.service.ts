@@ -95,10 +95,11 @@ export class UserService {
       .where('user.idUser = :idUser', { idUser })
       .select([
         'user.idUser AS "idUser"',
-        'user.firstName AS "firstName"',
+        'user.userName AS "firstName"',
         'user.lastName AS "lastName"',
         'user.email AS "email"',
         'user.password AS "password"',
+        'role.roleName AS "roleName"',
         'user.phoneNumber AS "phoneNumber"',
         'user.address AS "address"',
         'city.cityName AS "cityName"',
@@ -167,7 +168,6 @@ export class UserService {
     const role = await this.roleRepository.findOne({
       where: { idRole: updateUserDto.idRole },
     });
-
     if (!role) {
       throw new BadRequestException('Role not found');
     }
@@ -206,7 +206,6 @@ export class UserService {
     if (!city) {
       throw new BadRequestException('City not found');
     }
-
     const newNeighborhood = await this.neighborhoodRepository.save({
       city: city,
       neighborhoodName: createNeighborhoodDto.neighborhoodName,
@@ -266,5 +265,13 @@ export class UserService {
   private async hashPassword(password: string): Promise<string> {
     const saltRounds = 10;
     return bcrypt.hash(password, saltRounds);
+  }
+
+  async findRoleByIdUser(idUser: number): Promise<string> {
+    const user = await this.userRepository.findOne({
+      where: { idUser: idUser },
+      relations: ["role"],
+    });
+    return user.role.roleName;
   }
 }
