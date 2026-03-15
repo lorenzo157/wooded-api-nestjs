@@ -13,10 +13,9 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Users } from './entities/Users';
 //import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/role/role.guard';
-import { Roles } from '../auth/role/role.decorator';
+//import { RolesGuard } from '../auth/role/role.guard';
+//import { Roles } from '../auth/role/role.decorator';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { CreateNeighborhoodDto } from './dto/create-neighborhood.dto';
 import { ReadUserDto } from './dto/read-user.dto';
 
 //UseGuards(JwtAuthGuard, RolesGuard)
@@ -27,7 +26,7 @@ export class UserController {
 
   @ApiOperation({ summary: '#M301: Crea un nuevo usuario' })
   @Post()
-  @Roles('gestor', 'administrador')
+  //@Roles('gestor', 'administrador')
   async createUser(@Body() createUserDto: CreateUserDto) {
     return this.userService.createUser(createUserDto);
   }
@@ -56,19 +55,7 @@ export class UserController {
     return this.userService.updateUserById(idUser, updateUserDto);
   }
 
-  @ApiOperation({ summary: '#M306: Busca todas las ciudades por ID de Provincia' })
-  @Get('cities/:idProvince')
-  async findAllCitiesByProvince(@Param('idProvince') idProvince: number) {
-    return this.userService.findAllCitiesByProvince(idProvince);
-  }
-
-  @ApiOperation({ summary: '#M307: Busca todas las provincias' })
-  @Get('provinces')
-  async findAllProvinces() {
-    return this.userService.findAllProvinces();
-  }
-
-  @ApiOperation({ summary: '#M308: Eliminar usuario por ID' })
+  @ApiOperation({ summary: '#M306: Eliminar usuario por ID' })
   @Delete(':idUser')
   async removeUserById(@Param('idUser') idUser: number) {
     return this.userService.removeUserById(idUser);
@@ -78,11 +65,5 @@ export class UserController {
   @Get('roles')
   async getAllRoles() {
     return this.userService.findAllRoles();
-  }
-
-  @ApiOperation({ summary: '#M310: Crea un nuevo barrio' })
-  @Post('create-neighborhood')
-  async createNeighborhood(@Body() createNeighborhoodDto: CreateNeighborhoodDto) {
-    return this.userService.createNeighborhood(createNeighborhoodDto);
   }
 }

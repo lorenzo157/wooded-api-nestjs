@@ -1,53 +1,23 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { UnitWork } from './entities/UnitWork';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Trees } from '../tree/entities/Trees';
 import { ReadUnitWorkDto } from './dto/read-unitwork.dto';
-import { PopulationDataDto } from './dto/population-data.dto';
+
 import { SampleDataDto } from './dto/sample-data.dto';
 import { ReadFilterDto } from '../project/dto/read-filter.dto';
-import { Coordinates } from '../shared/entities/Coordinates';
+import { Coordinates } from '../location/entities/Coordinates';
+import { TreeService } from '../tree/tree.service';
 @Injectable()
 export class UnitWorkService {
-  private oldUpdateDto: ReadUnitWorkDto;
   private sampleDataDto: SampleDataDto;
-  private populationDataDto: PopulationDataDto;
   constructor(
     @InjectRepository(UnitWork) private readonly unitWorkRepository: Repository<UnitWork>,
-    @InjectRepository(Trees) private readonly treeRepository: Repository<Trees>,
     @InjectRepository(Coordinates) private readonly coordinatesRepository: Repository<Coordinates>,
+    @Inject(forwardRef(() => TreeService)) private readonly treeService: TreeService,
   ) {
-    this.oldUpdateDto = {
-      idUnitWork: 0,
-      projectId: 0,
-      neighborhoodId: 0,
-      neighborhoodName: '',
-      pruningTraining: 0,
-      pruningSanitary: 0,
-      pruningHeightReduction: 0,
-      pruningBranchThinning: 0,
-      pruningSignClearing: 0,
-      pruningPowerLineClearing: 0,
-      pruningRootDeflectors: 0,
-      cabling: 0,
-      fastening: 0,
-      propping: 0,
-      permeableSurfaceIncreases: 0,
-      moveTarget: 0,
-      restrictAccess: 0,
-      fertilizations: 0,
-      descompression: 0,
-      drains: 0,
-      extractions: 0,
-      plantations: 0,
-      openingsPot: 0,
-      advancedInspections: 0,
-      campaignDescription: '',
-    };
-
     this.sampleDataDto = {
       treeMeanByNeighborhood: 0,
       treeQty: 0,
@@ -78,6 +48,8 @@ export class UnitWorkService {
     const unitWorks = await this.unitWorkRepository
       .createQueryBuilder('unit_work')
       .innerJoinAndSelect('unit_work.neighborhood', 'neighborhood')
+      .innerJoinAndSelect('neighborhood.city', 'city')
+      .innerJoinAndSelect('city.province', 'province')
       .where('unit_work.project.idProject = :idProject', { idProject })
       .andWhere('unit_work.unitWork_2 is null')
       .select([
@@ -85,6 +57,9 @@ export class UnitWorkService {
         'unit_work.projectId AS "projectId"',
         'unit_work.neighborhoodId AS "neighborhoodId"',
         'neighborhood.neighborhoodName AS "neighborhoodName"',
+        'neighborhood.numBlocksInNeighborhood AS "numBlocksInNeighborhood"',
+        'city.cityName AS "cityName"',
+        'province.provinceName AS "provinceName"',
         'unit_work.pruningTraining AS "pruningTraining"',
         'unit_work.pruningSanitary AS "pruningSanitary"',
         'unit_work.pruningHeightReduction AS "pruningHeightReduction"',
@@ -114,6 +89,9 @@ export class UnitWorkService {
       projectId: unitWork.projectId,
       neighborhoodId: unitWork.neighborhoodId,
       neighborhoodName: unitWork.neighborhoodName,
+      numBlocksInNeighborhood: unitWork.numBlocksInNeighborhood,
+      cityName: unitWork.cityName,
+      provinceName: unitWork.provinceName,
       pruningTraining: unitWork.pruningTraining,
       pruningSanitary: unitWork.pruningSanitary,
       pruningHeightReduction: unitWork.pruningHeightReduction,
@@ -139,92 +117,72 @@ export class UnitWorkService {
   }
 
   async generateUnitWorksToProject(idProject: number) {
-    const neighborhoodIds = await this.findNeighborhoodsIdsOfTreesInProjectId(idProject);
+    const neighborhoods = await this.treeService.getNeighborhoodsByProject(idProject);
 
-    neighborhoodIds.forEach(async (neighborhood) => {
+    for (const neighborhood of neighborhoods) {
+      const { idNeighborhood, numBlocksInNeighborhood } = neighborhood;
+
       const findUnitWork = await this.unitWorkRepository.findOneBy({
         projectId: idProject,
-        neighborhoodId: neighborhood.neighborhoodId,
+        neighborhoodId: idNeighborhood,
       });
 
       if (findUnitWork) {
-        // Existe el registro con estos valores de projectId y neighborhoodId
-        return null;
+        continue;
       }
 
-      // Crea una nueva instancia de UnitWork con los valores iniciales necesarios
+      const treesInNeighborhood = await this.treeService.countTreesInNeighborhood(idProject, idNeighborhood);
+      if (!treesInNeighborhood) {
+        throw new Error(`No trees found for neighborhood ID: ${idNeighborhood}`);
+      }
+
+      // avg(treesInTheBlock) * numBlocksInNeighborhood = estimated total trees in neighborhood
+      const averageTreesInBlock = await this.treeService.getMeanTreesInBlock(idProject, idNeighborhood);
+      console.log(' averageTreesInBlock:', averageTreesInBlock);
+      const estimatedTotalTreesInNeighborhood = Math.round(averageTreesInBlock * numBlocksInNeighborhood);
+      console.log(' estimatedTotalTreesInNeighborhood:', estimatedTotalTreesInNeighborhood);
+
+      const scale = (count: number) => {
+        const result = Math.round((count / treesInNeighborhood) * estimatedTotalTreesInNeighborhood);
+        console.log(`scale(${count}) => (${count}/${treesInNeighborhood}) * ${estimatedTotalTreesInNeighborhood} = ${result}`);
+        return result;
+      };
+      const count = async (intervention: string) => {
+        const result = await this.countInterventionInUnitWork(idProject, idNeighborhood, intervention);
+        console.log(`count("${intervention}") => ${result}`);
+        return result;
+      };
+
       const newUnitWork = this.unitWorkRepository.create({
         projectId: idProject,
-        neighborhoodId: neighborhood.neighborhoodId,
-        pruningTraining: await this.obtainPruningTrainingQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        pruningSanitary: await this.obtainPruningSanitaryQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        pruningHeightReduction: await this.obtainPruningHeightReductionQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        pruningBranchThinning: await this.obtainPruningBranchThinningQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        pruningSignClearing: await this.obtainPruningSignClearingQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        pruningPowerLineClearing: await this.obtainPruningPowerLineClearingQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        pruningRootDeflectors: await this.obtainPruningRootDeflectorsQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        restrictAccess: await this.obtainrestrictAccessQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        moveTarget: await this.obtainmoveTargetQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        cabling: await this.obtainCablingQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        fastening: await this.obtainFasteningQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        propping: await this.obtainProppingQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        permeableSurfaceIncreases: await this.obtainPermeableSurfaceIncreasesQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        fertilizations: await this.obtainFertilizationsQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        descompression: await this.obtainDescompressionQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        drains: await this.obtainDrainsQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        extractions: await this.obtainExtractionsQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        plantations: await this.obtainPlantationsQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        openingsPot: await this.obtainOpeningsPotQtyInUnitWork(idProject, neighborhood.neighborhoodId),
-        advancedInspections: await this.obtainAdvancedInspectionsQtyInUnitWork(idProject, neighborhood.neighborhoodId),
+        neighborhoodId: idNeighborhood,
+        pruningTraining: scale(await count('poda (formacion)')),
+        pruningSanitary: scale(await count('poda (sanitaria)')),
+        pruningHeightReduction: scale(await count('poda (reduccion de altura)')),
+        pruningBranchThinning: scale(await count('poda (raleo de ramas)')),
+        pruningSignClearing: scale(await count('poda (despeje de señaletica)')),
+        pruningPowerLineClearing: scale(await count('poda (despeje de conductores electricos)')),
+        pruningRootDeflectors: scale(await count('poda (radicular + uso de deflectores)')),
+        restrictAccess: scale(await count('restringir acceso')),
+        moveTarget: scale(await count('mover el blanco')),
+        cabling: scale(await count('cableado')),
+        fastening: scale(await count('sujecion')),
+        propping: scale(await count('apuntalamiento')),
+        permeableSurfaceIncreases: scale(await count('aumentar superficie permeable')),
+        fertilizations: scale(await count('fertilizacion')),
+        descompression: scale(await count('descompactado')),
+        drains: scale(await count('drenaje')),
+        extractions: scale(await count('extraccion del arbol')),
+        plantations: scale(await count('plantacion de arbol faltante')),
+        openingsPot: scale(await count('abertura de cazuela en vereda')),
+        advancedInspections: scale(await count('requiere inspeccion avanzada')),
         campaignDescription: null,
       });
 
-      const populationTreesQty = await this.getTreesQtyPopulationInNeighborhood(neighborhood.neighborhoodId, idProject);
-
-      const treeQtyOfSample = await this.obtainTreeQtyInTheBlock(neighborhood.neighborhoodId, idProject);
-
-      if (!treeQtyOfSample) {
-        throw new Error(`Tree quantity not found for UnitWork ID: ${findUnitWork.idUnitWork}`);
-      }
-
-      newUnitWork.pruningTraining = Math.round((newUnitWork.pruningTraining / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.pruningSanitary = Math.round((newUnitWork.pruningSanitary / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.pruningHeightReduction = Math.round((newUnitWork.pruningHeightReduction / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.pruningBranchThinning = Math.round((newUnitWork.pruningBranchThinning / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.pruningSignClearing = Math.round((newUnitWork.pruningSignClearing / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.pruningPowerLineClearing = Math.round((newUnitWork.pruningPowerLineClearing / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.pruningRootDeflectors = Math.round((newUnitWork.pruningRootDeflectors / treeQtyOfSample) * populationTreesQty);
-
-      newUnitWork.cabling = Math.round((newUnitWork.cabling / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.fastening = Math.round((newUnitWork.fastening / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.propping = Math.round((newUnitWork.propping / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.permeableSurfaceIncreases = Math.round((newUnitWork.permeableSurfaceIncreases / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.moveTarget = Math.round((newUnitWork.moveTarget / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.restrictAccess = Math.round((newUnitWork.restrictAccess / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.fertilizations = Math.round((newUnitWork.fertilizations / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.descompression = Math.round((newUnitWork.descompression / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.drains = Math.round((newUnitWork.drains / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.extractions = Math.round((newUnitWork.extractions / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.plantations = Math.round((newUnitWork.plantations / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.openingsPot = Math.round((newUnitWork.openingsPot / treeQtyOfSample) * populationTreesQty);
-      newUnitWork.advancedInspections = Math.round((newUnitWork.advancedInspections / treeQtyOfSample) * populationTreesQty);
-
-      const unitWork = await this.unitWorkRepository.save(newUnitWork);
-    });
+      await this.unitWorkRepository.save(newUnitWork);
+    }
 
     return true;
-  }
-
-  async findNeighborhoodsIdsOfTreesInProjectId(idProject: number) {
-    const neighborhoods = await this.treeRepository
-      .createQueryBuilder('trees')
-      .innerJoinAndSelect('trees.project', 'project')
-      .where('project.idProject = :idProject', { idProject })
-      .select(['trees.neighborhood AS "neighborhoodId"'])
-      .groupBy('trees.neighborhood')
-      .getRawMany();
-
-    return neighborhoods;
   }
 
   async createCampaign(idUnitWork: number, campaignDescription: CreateCampaignDto) {
@@ -241,24 +199,6 @@ export class UnitWorkService {
       projectId: unitwork.projectId,
       neighborhoodId: unitwork.neighborhoodId,
       campaignDescription: campaignDescription.campaignDescription,
-      cabling: 0,
-      fastening: 0,
-      propping: 0,
-      permeableSurfaceIncreases: 0,
-      fertilizations: 0,
-      descompression: 0,
-      drains: 0,
-      extractions: 0,
-      plantations: 0,
-      openingsPot: 0,
-      advancedInspections: 0,
-      pruningTraining: 0,
-      pruningSanitary: 0,
-      pruningHeightReduction: 0,
-      pruningBranchThinning: 0,
-      pruningSignClearing: 0,
-      pruningPowerLineClearing: 0,
-      pruningRootDeflectors: 0,
       unitWork_2: unitwork,
     });
     return this.unitWorkRepository.save(newCampaign);
@@ -334,7 +274,6 @@ export class UnitWorkService {
     }
 
     const {
-      projectName,
       campaignDescription,
       pruningTraining,
       pruningSanitary,
@@ -358,78 +297,42 @@ export class UnitWorkService {
       advancedInspections,
     } = updateCampaignDto;
 
-    // Verifying each value of the new sum is not greather than unitWork's values
+    // Returns current + increment if increment is provided and doesn't exceed the UW limit; otherwise keeps current
+    const clampedAdd = (current: number, increment: number | undefined, limit: number): number => {
+      if (!increment) return current;
+      return current + increment <= limit ? (current || 0) + increment : current;
+    };
+
     const partialUpdate = {
       ...(campaignDescription && { campaignDescription }),
-      pruningTraining:
-        pruningTraining && campaign.pruningTraining + pruningTraining <= unitWork.pruningTrainingUW
-          ? (campaign.pruningTraining || 0) + pruningTraining
-          : campaign.pruningTraining,
-      pruningSanitary:
-        pruningSanitary && campaign.pruningSanitary + pruningSanitary <= unitWork.pruningSanitaryUW
-          ? (campaign.pruningSanitary || 0) + pruningSanitary
-          : campaign.pruningSanitary,
-      pruningHeightReduction:
-        pruningHeightReduction && campaign.pruningHeightReduction + pruningHeightReduction <= unitWork.pruningHeightReductionUW
-          ? (campaign.pruningHeightReduction || 0) + pruningHeightReduction
-          : campaign.pruningHeightReduction,
-      pruningBranchThinning:
-        pruningBranchThinning && campaign.pruningBranchThinning + pruningBranchThinning <= unitWork.pruningBranchThinningUW
-          ? (campaign.pruningBranchThinning || 0) + pruningBranchThinning
-          : campaign.pruningBranchThinning,
-      pruningSignClearing:
-        pruningSignClearing && campaign.pruningSignClearing + pruningSignClearing <= unitWork.pruningSignClearingUW
-          ? (campaign.pruningSignClearing || 0) + pruningSignClearing
-          : campaign.pruningSignClearing,
-      pruningPowerLineClearing:
-        pruningPowerLineClearing && campaign.pruningPowerLineClearing + pruningPowerLineClearing <= unitWork.pruningPowerLineClearingUW
-          ? (campaign.pruningPowerLineClearing || 0) + pruningPowerLineClearing
-          : campaign.pruningPowerLineClearing,
-      pruningRootDeflectors:
-        pruningRootDeflectors && campaign.pruningRootDeflectors + pruningRootDeflectors <= unitWork.pruningRootDeflectorsUW
-          ? (campaign.pruningRootDeflectors || 0) + pruningRootDeflectors
-          : campaign.pruningRootDeflectors,
-      cabling: cabling && campaign.cabling + cabling <= unitWork.cablingUW ? (campaign.cabling || 0) + cabling : campaign.cabling,
-      fastening:
-        fastening && campaign.fastening + fastening <= unitWork.fasteningUW ? (campaign.fastening || 0) + fastening : campaign.fastening,
-      propping: propping && campaign.propping + propping <= unitWork.proppingUW ? (campaign.propping || 0) + propping : campaign.propping,
-      permeableSurfaceIncreases:
-        permeableSurfaceIncreases && campaign.permeableSurfaceIncreases + permeableSurfaceIncreases <= unitWork.permeableSurfaceIncreasesUW
-          ? (campaign.permeableSurfaceIncreases || 0) + permeableSurfaceIncreases
-          : campaign.permeableSurfaceIncreases,
-      moveTarget:
-        moveTarget && campaign.moveTarget + moveTarget <= unitWork.moveTargetUW
-          ? (campaign.moveTarget || 0) + moveTarget
-          : campaign.moveTarget,
-      restrictAccess:
-        restrictAccess && campaign.restrictAccess + restrictAccess <= unitWork.restrictAccessUW
-          ? (campaign.restrictAccess || 0) + restrictAccess
-          : campaign.restrictAccess,
-      fertilizations:
-        fertilizations && campaign.fertilizations + fertilizations <= unitWork.fertilizationsUW
-          ? (campaign.fertilizations || 0) + fertilizations
-          : campaign.fertilizations,
-      descompression:
-        descompression && campaign.descompression + descompression <= unitWork.descompressionUW
-          ? (campaign.descompression || 0) + descompression
-          : campaign.descompression,
-      drains: drains && campaign.drains + drains <= unitWork.drainsUW ? (campaign.drains || 0) + drains : campaign.drains,
-      extractions:
-        extractions && campaign.extractions + extractions <= unitWork.extractionsUW
-          ? (campaign.extractions || 0) + extractions
-          : campaign.extractions,
-      plantations:
-        plantations && campaign.plantations + plantations <= unitWork.plantationsUW
-          ? (campaign.plantations || 0) + plantations
-          : campaign.plantations,
-      openingsPot:
-        openingsPot && campaign.openingsPot + openingsPot <= unitWork.openingsPotUW
-          ? (campaign.openingsPot || 0) + openingsPot
-          : campaign.openingsPot,
-      advancedInspections:
-        advancedInspections && campaign.advancedInspections + advancedInspections <= unitWork.advancedInspectionsUW
-          ? (campaign.advancedInspections || 0) + advancedInspections
-          : campaign.advancedInspections,
+      pruningTraining: clampedAdd(campaign.pruningTraining, pruningTraining, unitWork.pruningTrainingUW),
+      pruningSanitary: clampedAdd(campaign.pruningSanitary, pruningSanitary, unitWork.pruningSanitaryUW),
+      pruningHeightReduction: clampedAdd(campaign.pruningHeightReduction, pruningHeightReduction, unitWork.pruningHeightReductionUW),
+      pruningBranchThinning: clampedAdd(campaign.pruningBranchThinning, pruningBranchThinning, unitWork.pruningBranchThinningUW),
+      pruningSignClearing: clampedAdd(campaign.pruningSignClearing, pruningSignClearing, unitWork.pruningSignClearingUW),
+      pruningPowerLineClearing: clampedAdd(
+        campaign.pruningPowerLineClearing,
+        pruningPowerLineClearing,
+        unitWork.pruningPowerLineClearingUW,
+      ),
+      pruningRootDeflectors: clampedAdd(campaign.pruningRootDeflectors, pruningRootDeflectors, unitWork.pruningRootDeflectorsUW),
+      cabling: clampedAdd(campaign.cabling, cabling, unitWork.cablingUW),
+      fastening: clampedAdd(campaign.fastening, fastening, unitWork.fasteningUW),
+      propping: clampedAdd(campaign.propping, propping, unitWork.proppingUW),
+      permeableSurfaceIncreases: clampedAdd(
+        campaign.permeableSurfaceIncreases,
+        permeableSurfaceIncreases,
+        unitWork.permeableSurfaceIncreasesUW,
+      ),
+      moveTarget: clampedAdd(campaign.moveTarget, moveTarget, unitWork.moveTargetUW),
+      restrictAccess: clampedAdd(campaign.restrictAccess, restrictAccess, unitWork.restrictAccessUW),
+      fertilizations: clampedAdd(campaign.fertilizations, fertilizations, unitWork.fertilizationsUW),
+      descompression: clampedAdd(campaign.descompression, descompression, unitWork.descompressionUW),
+      drains: clampedAdd(campaign.drains, drains, unitWork.drainsUW),
+      extractions: clampedAdd(campaign.extractions, extractions, unitWork.extractionsUW),
+      plantations: clampedAdd(campaign.plantations, plantations, unitWork.plantationsUW),
+      openingsPot: clampedAdd(campaign.openingsPot, openingsPot, unitWork.openingsPotUW),
+      advancedInspections: clampedAdd(campaign.advancedInspections, advancedInspections, unitWork.advancedInspectionsUW),
     };
 
     const result = await this.unitWorkRepository.update(idCampaign, partialUpdate);
@@ -534,26 +437,26 @@ export class UnitWorkService {
       relations: ['neighborhood'],
     });
 
-    var pruningTrainingSum = 0;
-    var pruningSanitarySum = 0;
-    var pruningHeightReductionSum = 0;
-    var pruningBranchThinningSum = 0;
-    var pruningSignClearingSum = 0;
-    var pruningPowerLineClearingSum = 0;
-    var pruningRootDeflectorsSum = 0;
-    var cablingSum = 0;
-    var fasteningSum = 0;
-    var proppingSum = 0;
-    var permeableSurfaceIncreasesSum = 0;
-    var restrictAccessSum = 0;
-    var moveTargetSum = 0;
-    var fertilizationsSum = 0;
-    var descompressionSum = 0;
-    var drainsSum = 0;
-    var extractionsSum = 0;
-    var plantationsSum = 0;
-    var openingsPotSum = 0;
-    var advancedInspectionsSum = 0;
+    let pruningTrainingSum = 0;
+    let pruningSanitarySum = 0;
+    let pruningHeightReductionSum = 0;
+    let pruningBranchThinningSum = 0;
+    let pruningSignClearingSum = 0;
+    let pruningPowerLineClearingSum = 0;
+    let pruningRootDeflectorsSum = 0;
+    let cablingSum = 0;
+    let fasteningSum = 0;
+    let proppingSum = 0;
+    let permeableSurfaceIncreasesSum = 0;
+    let restrictAccessSum = 0;
+    let moveTargetSum = 0;
+    let fertilizationsSum = 0;
+    let descompressionSum = 0;
+    let drainsSum = 0;
+    let extractionsSum = 0;
+    let plantationsSum = 0;
+    let openingsPotSum = 0;
+    let advancedInspectionsSum = 0;
 
     // Sum all attributes of campaigns
     const campaigns = await this.findAllCampaignsByUnitWork(idUnitWork);
@@ -735,343 +638,8 @@ export class UnitWorkService {
 
   // Obtain intervention info by project and neighborhood
 
-  async obtainPruningTrainingQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const pruningTrainingQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Poda (Formación)' })
-      .select('COUNT(*)', 'pruning_training')
-      .getRawOne();
-
-    return parseInt(pruningTrainingQty?.pruning_training || '0', 10);
-  }
-
-  async obtainPruningSanitaryQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const pruningSanitaryQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Poda (Sanitaria)' })
-      .select('COUNT(*)', 'pruning_sanitary')
-      .getRawOne();
-
-    return parseInt(pruningSanitaryQty?.pruning_sanitary || '0', 10);
-  }
-
-  async obtainPruningHeightReductionQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const pruningHeightReductionQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Poda (Reducción de altura)' })
-      .select('COUNT(*)', 'pruning_height_reduction')
-      .getRawOne();
-
-    return parseInt(pruningHeightReductionQty?.pruning_height_reduction || '0', 10);
-  }
-
-  async obtainPruningBranchThinningQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const pruningBranchThinningQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Poda (Raleo de ramas)' })
-      .select('COUNT(*)', 'pruning_branch_thinning')
-      .getRawOne();
-
-    return parseInt(pruningBranchThinningQty?.pruning_branch_thinning || '0', 10);
-  }
-
-  async obtainPruningSignClearingQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const pruningSignClearingQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Poda (Despeje de señalética)' })
-      .select('COUNT(*)', 'pruning_sign_clearing')
-      .getRawOne();
-
-    return parseInt(pruningSignClearingQty?.pruning_sign_clearing || '0', 10);
-  }
-
-  async obtainPruningPowerLineClearingQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const pruningPowerLineClearingQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', {
-        interventionName: 'Poda (Despeje de conductores eléctricos)',
-      })
-      .select('COUNT(*)', 'pruning_power_line_clearing')
-      .getRawOne();
-
-    return parseInt(pruningPowerLineClearingQty?.pruning_power_line_clearing || '0', 10);
-  }
-
-  async obtainPruningRootDeflectorsQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const pruningRootDeflectorsQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', {
-        interventionName: 'Poda (Radicular + uso de deflectores)',
-      })
-      .select('COUNT(*)', 'pruning_root_deflectors')
-      .getRawOne();
-
-    return parseInt(pruningRootDeflectorsQty?.pruning_root_deflectors || '0', 10);
-  }
-
-  async obtainCablingQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const cablingQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Cableado' })
-      .select('COUNT(*)', 'cabling')
-      .getRawOne();
-
-    return parseInt(cablingQty?.cabling || '0', 10);
-  }
-
-  async obtainFasteningQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const fasteningQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Sujeción' })
-      .select('COUNT(*)', 'fastening')
-      .getRawOne();
-
-    return parseInt(fasteningQty?.fastening || '0', 10);
-  }
-
-  async obtainProppingQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const proppingQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Apuntalamiento' })
-      .select('COUNT(*)', 'propping')
-      .getRawOne();
-
-    return parseInt(proppingQty?.propping || '0', 10);
-  }
-
-  async obtainmoveTargetQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const moveTargetQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Mover el blanco' })
-      .select('COUNT(*)', 'moveTarget')
-      .getRawOne();
-
-    return parseInt(moveTargetQty?.moveTarget || '0', 10);
-  }
-
-  async obtainrestrictAccessQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const restrictAccessQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Restringir acceso' })
-      .select('COUNT(*)', 'restrictAccess')
-      .getRawOne();
-
-    return parseInt(restrictAccessQty?.restrictAccess || '0', 10);
-  }
-
-  async obtainPermeableSurfaceIncreasesQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const permeableSurfaceIncreasesQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Aumentar superficie permeable' })
-      .select('COUNT(*)', 'permeableSurfaceIncreases')
-      .getRawOne();
-
-    return parseInt(permeableSurfaceIncreasesQty?.permeableSurfaceIncreases || '0', 10);
-  }
-
-  async obtainFertilizationsQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const fertilizationsQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Fertilización' })
-      .select('COUNT(*)', 'fertilizations')
-      .getRawOne();
-
-    return parseInt(fertilizationsQty?.fertilizations || '0', 10);
-  }
-
-  async obtainDescompressionQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const descompressionQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Descompactado' })
-      .select('COUNT(*)', 'descompression')
-      .getRawOne();
-
-    return parseInt(descompressionQty?.descompression || '0', 10);
-  }
-
-  async obtainDrainsQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const drainsQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Drenaje' })
-      .select('COUNT(*)', 'drains')
-      .getRawOne();
-
-    return parseInt(drainsQty?.drains || '0', 10);
-  }
-
-  async obtainExtractionsQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const extractionsQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Extraccion del árbol' })
-      .select('COUNT(*)', 'extractions')
-      .getRawOne();
-
-    return parseInt(extractionsQty?.extractions || '0', 10);
-  }
-
-  async obtainPlantationsQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const plantationsQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Plantación de arbol faltante' })
-      .select('COUNT(*)', 'plantations')
-      .getRawOne();
-
-    return parseInt(plantationsQty?.plantations || '0', 10);
-  }
-
-  async obtainOpeningsPotQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const openingsPotQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'Abertura de cazuela en vereda' })
-      .select('COUNT(*)', 'openingsPot')
-      .getRawOne();
-
-    return parseInt(openingsPotQty?.openingsPot || '0', 10);
-  }
-
-  async obtainAdvancedInspectionsQtyInUnitWork(idProject: number, idNeighborhood: number): Promise<number> {
-    const advancedInspectionsQty = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .innerJoin('tree.interventionTrees', 'interventionTree')
-      .innerJoin('interventionTree.intervention', 'intervention')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName: 'REQUIERE INSPECCION AVANZADA' })
-      .select('COUNT(*)', 'advancedInspections')
-      .getRawOne();
-
-    return parseInt(advancedInspectionsQty?.advancedInspections || '0', 10);
-  }
-
-  async numNlocksInNeighborhood(idNeighborhood: number, idProject: number) {
-    const meanOfTreesInBlockByNeighborhood = await this.obtainMeanOfTreesInTheBlock(idNeighborhood, idProject);
-
-    const result = await this.treeRepository
-      .createQueryBuilder('trees')
-      .innerJoin('trees.neighborhood', 'neighborhood')
-      .innerJoin('trees.project', 'project')
-      .andWhere('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .select('neighborhood.numBlocksInNeighborhood AS "numBlocksInNeighborhood"') // Asegurar el alias correcto
-      .getRawOne();
-
-    return result;
+  private async countInterventionInUnitWork(idProject: number, idNeighborhood: number, interventionName: string): Promise<number> {
+    return this.treeService.countTreesByIntervention(idProject, idNeighborhood, interventionName);
   }
 
   async getTreesQtyPopulationInNeighborhoodUW(idUnitWork: number, idProject: number) {
@@ -1087,25 +655,18 @@ export class UnitWorkService {
 
   // Obtain the total quantity of trees in the neighborhood (or unit_work)
   async getTreesQtyPopulationInNeighborhood(idNeighborhood: number, idProject: number) {
-    const meanOfTreesInBlockByNeighborhood = await this.obtainMeanOfTreesInTheBlock(idNeighborhood, idProject);
+    const meanOfTreesInBlockByNeighborhood = await this.treeService.getMeanTreesInBlock(idProject, idNeighborhood);
 
-    const result = await this.treeRepository
-      .createQueryBuilder('trees')
-      .innerJoin('trees.neighborhood', 'neighborhood')
-      .innerJoin('trees.project', 'project')
-      .andWhere('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .select('neighborhood.numBlocksInNeighborhood AS "numBlocksInNeighborhood"') // Asegurar el alias correcto
-      .getRawOne();
-    if (!result) {
+    const numBlocksInNeighborhood = await this.treeService.getNumBlocksInNeighborhood(idProject, idNeighborhood);
+    if (numBlocksInNeighborhood === null) {
       throw new Error(`No se encontraron datos para idNeighborhood: ${idNeighborhood}, idProject: ${idProject}`);
     }
 
-    if (!result.numBlocksInNeighborhood) {
+    if (!numBlocksInNeighborhood) {
       throw new Error(`El campo 'numBlocksInNeighborhood' es null o no existe en la base de datos`);
     }
 
-    const neighborhoodPopulation = result.numBlocksInNeighborhood * meanOfTreesInBlockByNeighborhood;
+    const neighborhoodPopulation = numBlocksInNeighborhood * meanOfTreesInBlockByNeighborhood;
 
     return Math.round(neighborhoodPopulation);
   }
@@ -1125,7 +686,7 @@ export class UnitWorkService {
     const neighborhoodId = result.neighborhoodId;
 
     const stDevOfSample = await this.calculateStandardDeviationOfSample(idProject, neighborhoodId);
-    const treeQtyOfSample = await this.obtainTreeQtyInTheBlock(neighborhoodId, idProject);
+    const treeQtyOfSample = await this.treeService.countTreesInNeighborhood(idProject, neighborhoodId);
     const treeQtyOfPopulation = await this.getTreesQtyPopulationInNeighborhood(neighborhoodId, idProject);
 
     return (stDevOfSample * Math.sqrt(treeQtyOfSample / treeQtyOfPopulation)).toFixed(2);
@@ -1139,27 +700,19 @@ export class UnitWorkService {
       .select(['unit_work.neighborhoodId AS "neighborhoodId"'])
       .getRawOne();
 
-    const mean = await this.obtainMeanOfTreesInTheBlock(result.neighborhoodId, idProject);
+    const mean = await this.treeService.getMeanTreesInBlock(idProject, result.neighborhoodId);
     const meanOfTreesInBlocks = mean ? Number(mean).toFixed(2) : '0.00';
 
     return meanOfTreesInBlocks;
   }
 
   async calculateStandardDeviationOfSample(idProject: number, idNeighborhood: number) {
-    const obtainMeanOfTreesInTheBlock = await this.obtainMeanOfTreesInTheBlock(idNeighborhood, idProject);
+    const obtainMeanOfTreesInTheBlock = await this.treeService.getMeanTreesInBlock(idProject, idNeighborhood);
 
     if (!obtainMeanOfTreesInTheBlock) {
       return 0;
     }
-    const TreeListInTheBlock = await this.treeRepository
-      .createQueryBuilder('trees')
-      .innerJoin('trees.project', 'project')
-      .innerJoin('trees.neighborhood', 'neighborhood')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('trees.treesInTheBlock is not null')
-      .select(['trees.treesInTheBlock AS "treesInTheBlock"'])
-      .getRawMany();
+    const TreeListInTheBlock = await this.treeService.getTreesInTheBlockList(idProject, idNeighborhood);
 
     if (TreeListInTheBlock.length === 0) {
       throw new Error('No hay datos suficientes para calcular la desviación estándar');
@@ -1174,33 +727,6 @@ export class UnitWorkService {
 
     let variance = sum / TreeListInTheBlock.length;
     return Math.sqrt(variance);
-  }
-
-  async obtainMeanOfTreesInTheBlock(idNeighborhood: number, idProject: number) {
-    const meanOfTrees = await this.treeRepository
-      .createQueryBuilder('trees')
-      .innerJoin('trees.project', 'project')
-      .innerJoin('trees.neighborhood', 'neighborhood')
-      .where('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .select(['AVG(trees.treesInTheBlock) AS "meanOfTreesInTheBlock"'])
-      .getRawOne();
-    return meanOfTrees.meanOfTreesInTheBlock;
-  }
-
-  // Obtain the quantity of trees in the sample associated to project and neighborhood
-  async obtainTreeQtyInTheBlock(idNeighborhood: number, idProject: number): Promise<number> {
-    const qtyOfSample = await this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoin('tree.project', 'project')
-      .innerJoin('tree.neighborhood', 'neighborhood')
-      .andWhere('project.idProject = :idProject', { idProject })
-      .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .select(['COUNT(*) AS "treesQty"'])
-      .groupBy('tree.neighborhood')
-      .getRawOne();
-
-    return Math.round(qtyOfSample.treesQty);
   }
 
   async applyFilters(idProject: number, idUnitWork: number, readFilterDto: ReadFilterDto) {
@@ -1230,13 +756,6 @@ export class UnitWorkService {
     return trees;
   }
 
-  async getInfoOfNeighborhood(idProject: number, idUnitWork: number) {
-    //cconst treeQty;
-    //const predominantSpecies;
-    //const predominantRisk;
-    //const simpsonIndex;
-  }
-
   async getCoordinatesOfNeighborhood(idNeighborhood: number) {
     const coordinatesOfNeighborhood = await this.coordinatesRepository
       .createQueryBuilder('coordinates')
@@ -1250,5 +769,83 @@ export class UnitWorkService {
       .getRawMany();
 
     return coordinatesOfNeighborhood;
+  }
+
+  async removeUnitWorksByProjectId(idProject: number): Promise<void> {
+    await this.unitWorkRepository.delete({ projectId: idProject });
+  }
+
+  async getNeighborhoodDataByProject(idProject: number) {
+    const [rows, speciesCounts, riskCounts] = await Promise.all([
+      this.unitWorkRepository
+        .createQueryBuilder('uw')
+        .innerJoin('uw.neighborhood', 'neighborhood')
+        .leftJoin('neighborhood.coordinates', 'coordinates')
+        .where('uw.projectId = :idProject', { idProject })
+        .andWhere('uw.unitWork_2 is null')
+        .select([
+          'uw.idUnitWork AS "idUnitWork"',
+          'neighborhood.idNeighborhood AS "idNeighborhood"',
+          'neighborhood.neighborhoodName AS "neighborhoodName"',
+          'coordinates.idCoordinate AS "idCoordinate"',
+          'coordinates.latitude AS "latitude"',
+          'coordinates.longitude AS "longitude"',
+        ])
+        .orderBy('neighborhood.idNeighborhood', 'ASC')
+        .addOrderBy('coordinates.idCoordinate', 'ASC')
+        .getRawMany(),
+      this.treeService.getSpeciesCountsPerNeighborhood(idProject),
+      this.treeService.getRiskCountsPerNeighborhood(idProject),
+    ]);
+
+    const neighborhoodMap = new Map<
+      number,
+      {
+        idUnitWork: number;
+        idNeighborhood: number;
+        neighborhoodName: string;
+        coordinates: { latitude: number; longitude: number }[];
+        additionalInfo: {
+          totalTreesCount: number;
+          predominantSpecies: string | null;
+          predominantRisk: number | null;
+          simpsonIndex: number;
+        };
+      }
+    >();
+
+    for (const row of rows) {
+      if (!neighborhoodMap.has(row.idNeighborhood)) {
+        neighborhoodMap.set(row.idNeighborhood, {
+          idUnitWork: row.idUnitWork,
+          idNeighborhood: row.idNeighborhood,
+          neighborhoodName: row.neighborhoodName,
+          coordinates: [],
+          additionalInfo: { totalTreesCount: 0, predominantSpecies: null, predominantRisk: null, simpsonIndex: 0 },
+        });
+      }
+      if (row.idCoordinate !== null) {
+        neighborhoodMap.get(row.idNeighborhood).coordinates.push({ latitude: row.latitude, longitude: row.longitude });
+      }
+    }
+
+    for (const [idNeighborhood, entry] of neighborhoodMap) {
+      const speciesForNeighborhood = speciesCounts.filter((s) => s.neighborhoodId == idNeighborhood);
+      const riskForNeighborhood = riskCounts.filter((r) => r.neighborhoodId == idNeighborhood);
+
+      const totalTreesCount = speciesForNeighborhood.reduce((sum, s) => sum + s.count, 0);
+      const predominantSpecies = speciesForNeighborhood.length > 0 ? speciesForNeighborhood[0].species : null;
+      const predominantRisk = riskForNeighborhood.length > 0 ? riskForNeighborhood[0].risk : null;
+
+      let simpsonIndex = 0;
+      if (totalTreesCount > 1) {
+        const sumNiNi1 = speciesForNeighborhood.reduce((sum, s) => sum + s.count * (s.count - 1), 0);
+        simpsonIndex = parseFloat((1 - sumNiNi1 / (totalTreesCount * (totalTreesCount - 1))).toFixed(4));
+      }
+
+      entry.additionalInfo = { totalTreesCount, predominantSpecies, predominantRisk, simpsonIndex };
+    }
+
+    return Array.from(neighborhoodMap.values());
   }
 }

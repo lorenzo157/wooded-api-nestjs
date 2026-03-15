@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength, IsDate, IsNumber, isNumber } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength, IsNumber } from 'class-validator';
 
 export class CreateProjectDto {
   @ApiProperty({ description: 'Name of the project', maxLength: 25 })
@@ -15,22 +15,25 @@ export class CreateProjectDto {
   projectDescription: string;
 
   @ApiProperty({ description: 'Start date of the project' })
-  //@IsDate()
   @IsNotEmpty()
   startDate: string;
 
   @ApiProperty({ description: 'End date of the project' })
-  //@IsDate()
   @IsOptional()
   endDate?: string;
 
   @ApiProperty({ description: 'Project type', maxLength: 25 })
-  @IsBoolean()
+  @IsString()
+  @IsNotEmpty()
   projectType: string;
 
-  @IsNumber()
+  @IsString()
   @IsNotEmpty()
-  cityId: number;
+  cityName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  provinceName: string;
 
   @IsNumber()
   @IsNotEmpty()

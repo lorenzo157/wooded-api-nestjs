@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS neighborhoods (
     neighborhood_name VARCHAR(255) NOT NULL,
     num_blocks_in_neighborhood INTEGER NOT NULL,
     city_id INTEGER NOT NULL,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     CONSTRAINT fk_city FOREIGN KEY (city_id) REFERENCES cities(id_city)
 );
 

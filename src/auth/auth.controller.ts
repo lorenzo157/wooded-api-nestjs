@@ -5,6 +5,7 @@ import { LocalAuthGuard } from './local/local-auth.guard'; // We'll create this 
 import { JwtAuthGuard } from './jwt/jwt-auth.guard'; // Used for protecting routes
 import { Roles } from './role/role.decorator';
 import { ApiTags } from '@nestjs/swagger';
+import { JWT_COOKIE_OPTIONS } from '../utils/constants';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -18,14 +19,10 @@ export class AuthController {
     const payload = { idUser: user.idUser };
     const access_token = await this.authService.signPayload(payload);
 
-    // Set JWT as HttpOnly, Secure cookie
-    // res.cookie('access_token', access_token, {
-    //   httpOnly: true,
-    //   secure: true, // set to false if not using HTTPS in dev
-    //   sameSite: 'strict',
-    //   maxAge: 24 * 60 * 60 * 1000, // 1 day
-    // });
+    // Set JWT as HttpOnly cookie for web clients
+    res.cookie('access_token', access_token, JWT_COOKIE_OPTIONS);
 
+    // Also return token in body for mobile clients
     return {
       user,
       access_token,

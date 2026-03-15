@@ -4,6 +4,7 @@ import { Strategy, ExtractJwt } from 'passport-jwt';
 import { AuthService } from '../auth.service';
 import { ConfigService } from '@nestjs/config';
 import { EnvVars } from '../../config-loader';
+import { Request } from 'express';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -12,9 +13,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly configService: ConfigService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: configService.get(EnvVars.secretKey), // Get the secret key from ConfigService
+      jwtFromRequest: (req: Request) => {
+        // Web: check httpOnly cookie first
+        if (req?.cookies?.access_token) {
+          return req.cookies.access_token;
+        }
+        // Mobile: fall back to Authorization Bearer header
+        return ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+      },
+      secretOrKey: configService.get(EnvVars.secretKey),
       ignoreExpiration: false,
+      passReqToCallback: false,
     });
   }
 

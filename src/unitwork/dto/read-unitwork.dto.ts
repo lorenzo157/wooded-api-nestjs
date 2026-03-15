@@ -3,6 +3,9 @@ export interface ReadUnitWorkDto {
   projectId: number;
   neighborhoodId: number;
   neighborhoodName: string;
+  numBlocksInNeighborhood?: number;
+  cityName?: string;
+  provinceName?: string;
   cabling: number;
   fastening: number;
   propping: number;

@@ -33,6 +33,7 @@ export class ReadTreeDto {
   pestsNames: string[];
   latitude: number;
   longitude: number;
+  idNeighborhood: number | null;
   neighborhoodName: string;
   treeTypeName?: string;
   gender?: string;

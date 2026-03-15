@@ -81,25 +81,21 @@ export class ProjectController {
     return this.projectService.removeProjectById(idProject);
   }
 
-  //@Get('filter/:idProject') // aplicar filtros
-  //async getFilteredInfoByProject(@Param('idProject') idProject: number, @Body('readFilterDto') readFilterDto: ReadFilterDto){
-  // retur ...
-  //}
-
   @ApiOperation({ summary: '#M210: Obtiene los árboles por ID de proyecto' })
   @Get('trees/:idProject')
   async getTreesByIdProject(@Param('idProject') idProject: number) {
     return this.projectService.findTresByIdProject(idProject);
   }
 
-  // @Get('data-filter/:idProject')
-  // async getDataForFilters(@Param('idProject') idProject: number){
-  //   return
-  // }
-
   @ApiOperation({ summary: '#M211: Obtiene el ID de Usuario creador del proyecto' })
   @Get(':idProject/user')
   async getIdUserByIdProject(@Param('idProject') idProject: number) {
     return this.projectService.getIdUserByIdProject(idProject);
+  }
+
+  @ApiOperation({ summary: '#M212: Obtiene los barrios con sus coordenadas de polígono por ID de proyecto' })
+  @Get('get-neighborhood-data-of-project/:idProject')
+  async getNeighborhoodDataByProject(@Param('idProject') idProject: number) {
+    return this.projectService.getNeighborhoodDataByProject(idProject);
   }
 }

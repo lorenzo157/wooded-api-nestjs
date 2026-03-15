@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Projects } from './entities/Projects';
@@ -6,27 +6,30 @@ import { ReadProjectDto } from './dto/read-project.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { ProjectUser } from '../project/entities/ProjectUser';
-import { Cities } from '../shared/entities/Cities';
+import { Cities } from '../location/entities/Cities';
 import { ReadUserDto } from '../user/dto/read-user.dto';
 import { UserService } from '../user/user.service';
-import { Trees } from '../tree/entities/Trees';
-import { UnitWork } from '../unitwork/entities/UnitWork';
+import { TreeService } from '../tree/tree.service';
+import { UnitWorkService } from '../unitwork/unitwork.service';
 @Injectable()
 export class ProjectService {
   constructor(
     @InjectRepository(Projects) private readonly projectRepository: Repository<Projects>,
     @InjectRepository(ProjectUser) private readonly projectUserRepository: Repository<ProjectUser>,
     @InjectRepository(Cities) private readonly cityRepository: Repository<Cities>,
-    @InjectRepository(Trees) private readonly treeRepository: Repository<Trees>,
     private readonly userService: UserService,
-    @InjectRepository(UnitWork) private readonly unitWorkRepository: Repository<UnitWork>,
+    @Inject(forwardRef(() => TreeService)) private readonly treeService: TreeService,
+    private readonly unitWorkService: UnitWorkService,
   ) {}
 
   async createProject(createProjectDto: CreateProjectDto) {
-    const city = await this.cityRepository.findOne({ where: { idCity: createProjectDto.cityId } });
+    const city = await this.cityRepository.findOne({
+      where: { cityName: createProjectDto.cityName, province: { provinceName: createProjectDto.provinceName } },
+      relations: ['province'],
+    });
 
     if (!city) {
-      return 'Invalid idCity';
+      return 'Invalid city or province';
     }
 
     const user = await this.userService.findUserEntityById(createProjectDto.userId);
@@ -139,7 +142,7 @@ export class ProjectService {
       .where('project_user.projectId = :idProject', { idProject })
       .select([
         'user.idUser AS "idUser"',
-        'user.first AS "firstName"',
+        'user.firstName AS "firstName"',
         'user.lastName AS "lastName"',
         'user.email AS "email"',
         'user.password AS "password"',
@@ -171,25 +174,25 @@ export class ProjectService {
     const project = await this.projectRepository.findOne({ where: { idProject: idProject } });
     const user = await this.userService.findUserById(idUser);
 
-    var inserted = await this.projectUserRepository.findOne({
+    const inserted = await this.projectUserRepository.findOne({
       where: {
         userId: idUser,
         projectId: idProject,
       },
     });
 
-    var ReturnString: string;
+    let returnString: string;
 
     // Valid Project and User?
 
     if (!project) {
-      ReturnString = 'Invalid project';
+      returnString = 'Invalid project';
     } else {
       if (!user) {
-        ReturnString = 'Invalid user';
+        returnString = 'Invalid user';
       } else {
         if (inserted) {
-          ReturnString = 'Alredy inserted';
+          returnString = 'Alredy inserted';
         } else {
           const ProjectUser = this.projectUserRepository.create({
             projectId: idProject,
@@ -199,7 +202,7 @@ export class ProjectService {
         }
       }
     }
-    return ReturnString;
+    return returnString;
   }
 
   async removeUserFromProject(idProject: number, idUser: number) {
@@ -214,22 +217,17 @@ export class ProjectService {
   async updateProjectById(idProject: number, updateProjectDto: UpdateProjectDto) {
     const project = await this.findProject(idProject);
 
-    const { projectName, projectDescription, startDate, endDate, projectType } = updateProjectDto;
+    const { projectName, projectDescription, startDate, endDate } = updateProjectDto;
 
-    const idCity = updateProjectDto.idCity;
-    const city = await this.cityRepository.findOne({ where: { idCity } });
-
-    if (!project || !city) {
+    if (!project) {
       return null;
     }
 
     const partialUpdate = {
       ...(projectName && { projectName }),
       ...(projectDescription && { projectDescription }),
-      ...(city && { city }),
       ...(startDate && { startDate }),
       ...(endDate && { endDate }),
-      ...(projectType !== undefined && { projectType }),
     };
     const result = await this.projectRepository.update(idProject, partialUpdate);
 
@@ -238,6 +236,10 @@ export class ProjectService {
     }
 
     return project;
+  }
+
+  async getNeighborhoodDataByProject(idProject: number) {
+    return this.unitWorkService.getNeighborhoodDataByProject(idProject);
   }
 
   async getIdUserByIdProject(idProject: number) {
@@ -251,19 +253,15 @@ export class ProjectService {
   }
 
   async findTresByIdProject(idProject: number) {
-    const trees = this.treeRepository
-      .createQueryBuilder('tree')
-      .innerJoinAndSelect('tree.project', 'project')
-      .where('project.idProject = :idProject', { idProject })
-      .select([
-        'tree.idTree AS "idTree"',
-        'tree.address AS "address"',
-        'tree.datetime AS "datetime"',
-        'tree.treeValue AS "treeValue"',
-        'tree.risk AS "risk"',
-      ])
-      .getRawMany();
-    return trees;
+    const project = await this.projectRepository.findOne({
+      where: { idProject },
+      relations: ['trees'],
+      select: {
+        idProject: true,
+        trees: { idTree: true, address: true, datetime: true, treeValue: true, risk: true },
+      },
+    });
+    return project?.trees ?? [];
   }
 
   async removeProjectById(idProject: number) {
@@ -276,39 +274,11 @@ export class ProjectService {
       // Delete association project-user
       this.projectUserRepository.delete({ project: { idProject } });
     }
-    const idsFromTrees = await this.getIdsFromTreesByProjectId(idProject);
-    if (idsFromTrees) {
-      // Delete trees associated with project
-      idsFromTrees.forEach(async (id) => {
-        await this.treeRepository.delete(id);
-      });
-    }
+    await this.treeService.removeTreesByProjectId(idProject);
 
-    const unitwork = await this.unitWorkRepository.findOne({ where: { projectId: idProject } });
-
-    if (unitwork) {
-      // Delete unit work associated with project
-      this.unitWorkRepository.delete({ project: { idProject } });
-    }
+    await this.unitWorkService.removeUnitWorksByProjectId(idProject);
 
     return await this.projectRepository.delete(idProject);
-  }
-
-  async getIdsFromTreesByProjectId(idProject: number) {
-    const trees = this.treeRepository
-      .createQueryBuilder('trees')
-      .innerJoinAndSelect('trees.project', 'project')
-      .where('project.idProject = :idProject', { idProject })
-      .select([
-        'tree.idTree AS "idTree"',
-        'tree.address AS "address"',
-        'tree.datetime AS "datetime"',
-        'tree.treeValue AS "treeValue"',
-        'tree.treeName AS "treeName"',
-        'tree.risk AS "risk"',
-      ])
-      .getRawMany();
-    return trees;
   }
 
   async findProject(idProject: number): Promise<ReadProjectDto | null> {

@@ -2,9 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { UnitWorkService } from './unitwork.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
-import { UnitWork } from './entities/UnitWork';
 import { ReadUnitWorkDto } from './dto/read-unitwork.dto';
-import { SampleDataDto } from './dto/sample-data.dto';
 import { ReadFilterDto } from '../project/dto/read-filter.dto';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -111,5 +109,12 @@ export class UnitWorkController {
   @Get('neighborhood-coordinates')
   async getCoordinatesOfNeighborhood(@Param('idUnitWork') idUnitWork: number) {
     return this.unitworkService.getCoordinatesOfNeighborhood(idUnitWork);
+  }
+
+  @ApiOperation({ summary: '#M416: Elimina todas las Unidades de Trabajo de un proyecto' })
+  @Delete('delete-unitworks')
+  async removeUnitWorksByProjectId(@Param('idProject') idProject: number) {
+    await this.unitworkService.removeUnitWorksByProjectId(idProject);
+    return true;
   }
 }

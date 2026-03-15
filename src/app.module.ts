@@ -10,6 +10,7 @@ import * as path from 'path';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UtilsModule } from './utils/utils.module';
+import { LocationModule } from './location/location.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { UtilsModule } from './utils/utils.module';
     AuthModule,
     UnitWorkModule,
     UtilsModule,
+    LocationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

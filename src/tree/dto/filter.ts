@@ -1,4 +1,4 @@
 export interface Filter {
   filterName: string;
-  values: string[];
+  values: Record<string, any>[];
 }

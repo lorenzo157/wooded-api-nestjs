@@ -1,8 +1,8 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-import { Cities } from '../../shared/entities/Cities';
+import { Cities } from '../../location/entities/Cities';
 import { Trees } from '../../tree/entities/Trees';
 import { UnitWork } from './UnitWork';
-import { Coordinates } from '../../shared/entities/Coordinates';
+import { Coordinates } from '../../location/entities/Coordinates';
 
 @Index('neighborhoods_pkey', ['idNeighborhood'], { unique: true })
 @Entity('neighborhoods', { schema: 'public' })
@@ -15,6 +15,9 @@ export class Neighborhoods {
 
   @Column('integer', { name: 'num_blocks_in_neighborhood' })
   numBlocksInNeighborhood: number;
+
+  @Column('timestamp', { name: 'deleted_at', nullable: true, default: null })
+  deletedAt: Date | null;
 
   @ManyToOne(() => Cities, (cities) => cities.neighborhoods)
   @JoinColumn([{ name: 'city_id', referencedColumnName: 'idCity' }])

@@ -1,10 +1,11 @@
 export class Coordinates {
-  lat: number;
-  lng: number;
+  latitude: number;
+  longitude: number;
 }
 
 export class CreateNeighborhoodDto {
-  idCity: number;
+  cityName: string;
+  provinceName: string;
   neighborhoodName: string;
   numBlocksInNeighborhood: number;
   coordinates: Coordinates[];

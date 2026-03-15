@@ -18,8 +18,8 @@ export class TreeController {
   // READ, Fetch all trees associated with a specific project, but only general atributes not specific
   @ApiOperation({ summary: '#M102: Busca todos los árboles por ID de Proyecto' })
   @Get()
-  async findAllTreesByIdProject(@Param('idProject') idProject: number) {
-    return this.treeService.findAllTreesByIdProject(idProject);
+  async findAllTreesByIdProject(@Param('idProject') idProject: number, @Query('idUnitWork') idUnitWork?: number) {
+    return this.treeService.findAllTreesByIdProject(idProject, idUnitWork);
   }
 
   @ApiOperation({ summary: '#M103: Obtener las coordenadas de los árboles por ID de Proyecto' })
@@ -60,21 +60,13 @@ export class TreeController {
   }
 
   @ApiOperation({ summary: '#M108: Obtiene todos los árboles filtrados' })
-  @Get(':idUnitWork/filtered-trees')
+  @Post('filtered-trees')
   async getFilteredTrees(
-    @Param('idUnitWork') idUnitWork: number,
     @Param('idProject') idProject: number,
-    @Query('filterNames') filterNames: string,
+    @Body() body: { filters: Record<string, string[]>; neighborhoodIds?: number[] },
   ) {
-    const filterNamesArray = filterNames ? filterNames.split(',') : [];
-    return this.treeService.getFilteredTrees(idProject, idUnitWork, filterNamesArray);
+    const result = await this.treeService.getFilteredTrees(idProject, body.filters ?? {}, body.neighborhoodIds);
+    console.log('🚀 ~ TreeController ~ getFilteredTrees ~ result:', result);
+    return result;
   }
-
-  // @Get(':idUnitWork/get-trees-and-neighborhood')
-  // async getTreesAndNeighborhood(@Param('idUnitWork') idUnitWork: number, @Param('idProject') idProject: number): Promise<TreeRequestData> {
-  //   const treeData = await this.treeService.getTreesData(idProject, idUnitWork);
-  //   const neighborhoodData = await this.treeService.getNeighborhoodData(idProject, idUnitWork);
-
-  //   return this.treeService.getTreesAndNeighborhood(treeData, neighborhoodData);
-  // }
 }

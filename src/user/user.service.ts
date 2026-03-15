@@ -5,26 +5,19 @@ import { Users } from './entities/Users';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
-import { Cities } from '../shared/entities/Cities';
+import { Cities } from '../location/entities/Cities';
 import { ReadUserDto } from './dto/read-user.dto';
 import { Roles } from './entities/Roles';
-import { Provinces } from '../shared/entities/Provinces';
-import { CreateNeighborhoodDto } from './dto/create-neighborhood.dto';
-import { Neighborhoods } from '../unitwork/entities/Neighborhoods';
-import { Coordinates } from '../shared/entities/Coordinates';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(Users) private readonly userRepository: Repository<Users>,
-    @InjectRepository(Provinces) private readonly provinceRepository: Repository<Provinces>,
     @InjectRepository(Cities) private readonly cityRepository: Repository<Cities>,
     @InjectRepository(Roles) private roleRepository: Repository<Roles>,
-    @InjectRepository(Neighborhoods) private neighborhoodRepository: Repository<Neighborhoods>,
-    @InjectRepository(Coordinates) private coordinateRepository: Repository<Coordinates>,
   ) {}
   async createUser(createUserDto: CreateUserDto): Promise<Users | boolean> {
-    const { email, password, provinceName, cityName, roleName, phoneNumber, ...userData } = createUserDto;
+    const { email, password, provinceName, cityName, roleName, ...userData } = createUserDto;
 
     // Check if the email is already in use
     const existingUser = await this.userRepository.findOne({ where: { email: email } });
@@ -32,13 +25,9 @@ export class UserService {
       throw new BadRequestException('Email already in use');
     }
 
-    const province = await this.provinceRepository.findOne({ where: { provinceName: provinceName } });
-    if (!province) {
-      throw new BadRequestException('Province not found');
-    }
-    // Find the city by name within the given province
     const city = await this.cityRepository.findOne({
-      where: { cityName: cityName, province: province },
+      where: { cityName: cityName, province: { provinceName: provinceName } },
+      relations: ['province'],
     });
     if (!city) {
       throw new BadRequestException('City not found in the specified province');
@@ -57,7 +46,6 @@ export class UserService {
       ...userData,
       email: email,
       password: hashedPassword,
-      phoneNumber: phoneNumber,
       city: city,
       role: role,
     });
@@ -95,7 +83,7 @@ export class UserService {
       .where('user.idUser = :idUser', { idUser })
       .select([
         'user.idUser AS "idUser"',
-        'user.userName AS "firstName"',
+        'user.firstName AS "firstName"',
         'user.lastName AS "lastName"',
         'user.email AS "email"',
         'user.password AS "password"',
@@ -104,7 +92,6 @@ export class UserService {
         'user.address AS "address"',
         'city.cityName AS "cityName"',
         'province.provinceName AS "provinceName"',
-        'role.roleName AS "roleName"',
       ])
       .getRawOne();
 
@@ -126,26 +113,24 @@ export class UserService {
     };
   }
 
-  async findAllProvinces() {
-    const provinces = await this.provinceRepository
-      .createQueryBuilder('province')
-      .select(['province.provinceName AS "provinceName"', 'province.idProvince AS "idProvince"'])
-      .orderBy('province.provinceName')
-      .getRawMany();
-
-    if (!provinces) {
-      return null;
-    }
-    return provinces;
-  }
-
   async removeUserById(idUser: number) {
     const user = await this.userRepository.findOne({
-      where: { idUser: idUser },
+      where: { idUser },
+      relations: ['projects', 'projectUsers'],
     });
 
     if (!user) return null;
+
+    if (user.projects?.length > 0) {
+      throw new BadRequestException('Cannot delete user: user has created projects');
+    }
+
+    if (user.projectUsers?.length > 0) {
+      throw new BadRequestException('Cannot delete user: user is assigned to one or more projects');
+    }
+
     await this.userRepository.delete({ idUser });
+    return true;
   }
 
   async updateUserById(idUser: number, updateUserDto: UpdateUserDto) {
@@ -155,10 +140,11 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    const { firstName, lastName, email, phoneNumber, address } = updateUserDto;
+    const { firstName, lastName, email, phoneNumber, address, heightMeters, cityName, provinceName, roleName } = updateUserDto;
 
     const city = await this.cityRepository.findOne({
-      where: { idCity: updateUserDto.idCity },
+      where: { cityName, province: { provinceName } },
+      relations: ['province'],
     });
 
     if (!city) {
@@ -166,7 +152,7 @@ export class UserService {
     }
 
     const role = await this.roleRepository.findOne({
-      where: { idRole: updateUserDto.idRole },
+      where: { roleName },
     });
     if (!role) {
       throw new BadRequestException('Role not found');
@@ -182,6 +168,7 @@ export class UserService {
       ...(email && { email }),
       ...(password && { password }),
       ...(address && { address }),
+      ...(heightMeters !== undefined && { heightMeters }),
       ...(city && { city }),
       ...(role && { role }),
       ...(phoneNumber && { phoneNumber }),
@@ -196,48 +183,6 @@ export class UserService {
     return result;
   }
 
-  async createNeighborhood(createNeighborhoodDto: CreateNeighborhoodDto) {
-    // Create the new neighborhood
-
-    const city = await this.cityRepository.findOne({
-      where: { idCity: createNeighborhoodDto.idCity },
-    });
-
-    if (!city) {
-      throw new BadRequestException('City not found');
-    }
-    const newNeighborhood = await this.neighborhoodRepository.save({
-      city: city,
-      neighborhoodName: createNeighborhoodDto.neighborhoodName,
-      numBlocksInNeighborhood: createNeighborhoodDto.numBlocksInNeighborhood,
-    });
-
-    for (const coordinate of createNeighborhoodDto.coordinates) {
-      const coordinateSaved = await this.coordinateRepository.save({
-        neighborhood: newNeighborhood,
-        latitude: coordinate.lat,
-        longitude: coordinate.lng,
-      });
-      if (!coordinateSaved) {
-        throw new BadRequestException('Coordinate already created');
-      }
-    }
-
-    // Close neighborhood
-
-    const coordinateSaved = await this.coordinateRepository.save({
-      neighborhood: newNeighborhood,
-      latitude: createNeighborhoodDto.coordinates[0].lat,
-      longitude: createNeighborhoodDto.coordinates[0].lng,
-    });
-
-    if (!coordinateSaved) {
-      throw new BadRequestException('Coordinate already created');
-    }
-
-    return true;
-  }
-
   async findAllRoles() {
     const roles = await this.roleRepository
       .createQueryBuilder('roles')
@@ -249,19 +194,6 @@ export class UserService {
     return roles;
   }
 
-  async findAllCitiesByProvince(idProvince: number) {
-    const cities = await this.provinceRepository
-      .createQueryBuilder('province')
-      .innerJoinAndSelect('province.cities', 'city')
-      .where('province.idProvince = :idProvince', { idProvince })
-      .select(['city.idCity AS "idCity"', 'city.cityName AS "cityName"'])
-      .orderBy('city.cityName')
-      .groupBy('city.idCity')
-      .getRawMany();
-
-    return cities;
-  }
-
   private async hashPassword(password: string): Promise<string> {
     const saltRounds = 10;
     return bcrypt.hash(password, saltRounds);
@@ -270,7 +202,7 @@ export class UserService {
   async findRoleByIdUser(idUser: number): Promise<string> {
     const user = await this.userRepository.findOne({
       where: { idUser: idUser },
-      relations: ["role"],
+      relations: ['role'],
     });
     return user.role.roleName;
   }

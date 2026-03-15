@@ -5,6 +5,8 @@ export class UpdateUserDto {
   password: string;
   phoneNumber: string | null;
   address: string | null;
-  idCity: number;
-  idRole: number;
+  heightMeters?: number;
+  cityName: string;
+  provinceName: string;
+  roleName: string;
 }

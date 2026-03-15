@@ -6,7 +6,7 @@ import { Trees } from './entities/Trees'; // Asegúrate de que es el nombre corr
 import { Projects } from '../project/entities/Projects';
 import { Conflicts } from './entities/Conflicts';
 import { ConflictTree } from './entities/ConflictTree';
-import { Coordinates } from '../shared/entities/Coordinates';
+import { Coordinates } from '../location/entities/Coordinates';
 import { Defects } from './entities/Defects';
 import { DefectTree } from './entities/DefectTree';
 import { Diseases } from './entities/Diseases';
@@ -38,7 +38,6 @@ import { UtilsModule } from '../utils/utils.module';
       Projects,
     ]),
     forwardRef(() => ProjectModule),
-    ProjectModule,
     UtilsModule,
   ], // Importa el repositorio
   providers: [TreeService],

@@ -24,7 +24,7 @@ async function bootstrap() {
 
   app.enableCors({
     origin: '*', // or '*' to allow all origins
-    methods: 'GET,POST,PUT,DELETE',
+    methods: 'GET,POST,PUT,PATCH,DELETE',
     allowedHeaders: 'Content-Type, Authorization, ngrok-skip-browser-warning',
   });
 

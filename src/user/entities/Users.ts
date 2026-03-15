@@ -1,7 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { ProjectUser } from '../../project/entities/ProjectUser';
 import { Projects } from '../../project/entities/Projects';
-import { Cities } from '../../shared/entities/Cities';
+import { Cities } from '../../location/entities/Cities';
 import { Roles } from './Roles';
 
 @Index('unique_email', ['email'], { unique: true })
@@ -39,8 +39,8 @@ export class Users {
   })
   address: string | null;
 
-  @Column('numeric', { name: 'height_meters', precision: 5, scale: 4 })
-  heightMeters: number;
+  @Column('numeric', { name: 'height_meters', precision: 5, scale: 4, nullable: true })
+  heightMeters: number | null;
 
   @OneToMany(() => ProjectUser, (projectUser) => projectUser.user)
   projectUsers: ProjectUser[];

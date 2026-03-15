@@ -27,6 +27,9 @@ export class CreateUserDto {
   address?: string;
 
   @IsNotEmpty()
+  heightMeters?: number;
+
+  @IsNotEmpty()
   @IsString()
   cityName: string;
 
