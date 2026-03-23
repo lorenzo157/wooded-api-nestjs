@@ -1,20 +1,31 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Request } from '@nestjs/common';
 import { UnitWorkService } from './unitwork.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { ReadUnitWorkDto } from './dto/read-unitwork.dto';
+import { ReadCampaignDto } from './dto/read-campaign.dto';
 import { ReadFilterDto } from '../project/dto/read-filter.dto';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../auth/role/role.decorator';
+import { ProjectService } from '../project/project.service';
 
 @ApiTags('UnitWork')
+@Roles('administrador', 'gestor')
 @Controller('project/:idProject/unitwork/:idUnitWork')
 export class UnitWorkController {
-  constructor(private readonly unitworkService: UnitWorkService) {}
+  constructor(
+    private readonly unitworkService: UnitWorkService,
+    private readonly projectService: ProjectService,
+  ) {}
 
   // Endpoint to fetch unit work assigned with the idProject
   @ApiOperation({ summary: '#M401: Busca todas las Unidades de Trabajo por ID de proyecto' })
   @Get()
-  async findAllUnitWorksByIdProject(@Param('idProject') idProject: number): Promise<ReadUnitWorkDto[]> {
+  async findAllUnitWorksByIdProject(
+    @Param('idProject') idProject: number,
+    @Request() req: { user: { idUser: number; role: string } },
+  ): Promise<ReadUnitWorkDto[]> {
+    await this.projectService.findProject(idProject, req.user.idUser, req.user.role);
     return this.unitworkService.findAllUnitWorksByIdProject(idProject);
   }
 
@@ -40,8 +51,14 @@ export class UnitWorkController {
   // Endpoint to fetch all the campaigns associated with the idUnitWork
   @ApiOperation({ summary: '#M404: Busca todas las campañas por ID de Unidad de Trabajo' })
   @Get('campaign')
-  async findAllCampaignsByIdUnitWork(@Param('idUnitWork') idUnitWork: number): Promise<ReadUnitWorkDto[]> {
+  async findAllCampaignsByIdUnitWork(@Param('idUnitWork') idUnitWork: number): Promise<ReadCampaignDto[]> {
     return this.unitworkService.findAllCampaignsByUnitWork(idUnitWork);
+  }
+
+  @ApiOperation({ summary: '#M405B: Busca una Unidad de Trabajo por ID' })
+  @Get('details')
+  async findUnitWorkById(@Param('idUnitWork') idUnitWork: number): Promise<ReadUnitWorkDto> {
+    return this.unitworkService.findUnitWorkById(idUnitWork);
   }
 
   @ApiOperation({ summary: '#M405: Busca la desviacion estandar de la Unidad de Trabajo (barrio)' })
@@ -62,12 +79,6 @@ export class UnitWorkController {
     return this.unitworkService.getTreesQtyPopulationInNeighborhoodUW(idUnitWork, idProject);
   }
 
-  @ApiOperation({ summary: '#M408: Busca los árboles por Unidad de Trabajo' })
-  @Get('trees-of-unitwork')
-  async findTreesByUnitWork(@Param('idUnitWork') idUnitWork: number) {
-    return this.unitworkService.getTreesByUnitWork(idUnitWork);
-  }
-
   @ApiOperation({ summary: '#M409: Actualiza Campaña por ID' })
   @Patch('campaign/:idCampaign')
   async updateCampaignById(@Param('idCampaign') idCampaign: number, @Body() updateCampaignDto: UpdateCampaignDto) {
@@ -82,7 +93,7 @@ export class UnitWorkController {
 
   @ApiOperation({ summary: '#M411: Busca campaña por ID de Campaña' })
   @Get('campaign/:idCampaign')
-  async getCampaignById(@Param('idCampaign') idCampaign: number): Promise<ReadUnitWorkDto> {
+  async getCampaignById(@Param('idCampaign') idCampaign: number): Promise<ReadCampaignDto> {
     return this.unitworkService.getCampaignById(idCampaign);
   }
 

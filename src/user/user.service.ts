@@ -1,13 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Users } from './entities/Users';
-import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Cities } from '../location/entities/Cities';
 import { ReadUserDto } from './dto/read-user.dto';
 import { Roles } from './entities/Roles';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class UserService {
@@ -15,6 +15,7 @@ export class UserService {
     @InjectRepository(Users) private readonly userRepository: Repository<Users>,
     @InjectRepository(Cities) private readonly cityRepository: Repository<Cities>,
     @InjectRepository(Roles) private roleRepository: Repository<Roles>,
+    @Inject(forwardRef(() => AuthService)) private readonly authService: AuthService,
   ) {}
   async createUser(createUserDto: CreateUserDto): Promise<Users | boolean> {
     const { email, password, provinceName, cityName, roleName, ...userData } = createUserDto;
@@ -39,7 +40,7 @@ export class UserService {
     }
 
     // Hash the password
-    const hashedPassword = await this.hashPassword(password);
+    const hashedPassword = await this.authService.hashPassword(password);
 
     // Create the new user entity
     const newUser = this.userRepository.create({
@@ -56,22 +57,53 @@ export class UserService {
   }
 
   async findByEmail(email: string): Promise<Users | undefined> {
-    const user = await this.userRepository.findOne({
-      where: { email: email },
-    });
-    return user;
+    return this.userRepository.findOne({ where: { email } });
   }
 
-  async findAllUser() {
-    const users = await this.userRepository.find();
-    if (!users) return null;
-    return users;
-  }
+  async findUsers(search?: string): Promise<ReadUserDto[]> {
+    const qb = this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.role', 'role')
+      .leftJoinAndSelect('user.city', 'city')
+      .leftJoinAndSelect('city.province', 'province')
+      .select([
+        'user.idUser AS "idUser"',
+        'user.firstName AS "firstName"',
+        'user.lastName AS "lastName"',
+        'user.email AS "email"',
+        'role.roleName AS "roleName"',
+        'user.phoneNumber AS "phoneNumber"',
+        'user.address AS "address"',
+        'user.heightMeters AS "heightMeters"',
+        'city.cityName AS "cityName"',
+        'province.provinceName AS "provinceName"',
+      ]);
 
-  async findUserEntityById(idUser: number): Promise<Users> {
-    return await this.userRepository.findOne({
-      where: { idUser: idUser },
-    });
+    if (search) {
+      const term = search.toLowerCase();
+      const isNumeric = !isNaN(Number(search));
+      qb.where(
+        'LOWER(user.firstName) LIKE :term OR LOWER(user.lastName) LIKE :term OR LOWER(user.email) LIKE :term' +
+          (isNumeric ? ' OR user.idUser = :id' : ''),
+        { term: `%${term}%`, ...(isNumeric && { id: Number(search) }) },
+      );
+    }
+
+    const users = await qb.getRawMany();
+
+    return users.map((u) => ({
+      idUser: u.idUser,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      email: u.email,
+      password: null,
+      roleName: u.roleName ?? 'N/A',
+      phoneNumber: u.phoneNumber ?? null,
+      address: u.address ?? null,
+      heightMeters: u.heightMeters ?? null,
+      cityName: u.cityName ?? 'N/A',
+      provinceName: u.provinceName ?? 'N/A',
+    }));
   }
 
   async findUserById(idUser: number): Promise<ReadUserDto> {
@@ -90,6 +122,7 @@ export class UserService {
         'role.roleName AS "roleName"',
         'user.phoneNumber AS "phoneNumber"',
         'user.address AS "address"',
+        'user.heightMeters AS "heightMeters"',
         'city.cityName AS "cityName"',
         'province.provinceName AS "provinceName"',
       ])
@@ -108,6 +141,7 @@ export class UserService {
       roleName: user.roleName || 'N/A',
       phoneNumber: user.phoneNumber || null,
       address: user.address || null,
+      heightMeters: user.heightMeters ?? null,
       cityName: user.cityName || 'N/A',
       provinceName: user.provinceName || 'N/A',
     };
@@ -140,7 +174,7 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    const { firstName, lastName, email, phoneNumber, address, heightMeters, cityName, provinceName, roleName } = updateUserDto;
+    const { firstName, lastName, email, phoneNumber, address, heightMeters, cityName, provinceName, roleName, password } = updateUserDto;
 
     const city = await this.cityRepository.findOne({
       where: { cityName, province: { provinceName } },
@@ -158,15 +192,13 @@ export class UserService {
       throw new BadRequestException('Role not found');
     }
 
-    // Hash new password
-
-    const password = await this.hashPassword(updateUserDto.password);
+    const hashedPassword = password ? await this.authService.hashPassword(password) : null;
 
     const partialUpdate = {
       ...(firstName && { firstName }),
       ...(lastName && { lastName }),
       ...(email && { email }),
-      ...(password && { password }),
+      ...(hashedPassword && { password: hashedPassword }),
       ...(address && { address }),
       ...(heightMeters !== undefined && { heightMeters }),
       ...(city && { city }),
@@ -192,11 +224,6 @@ export class UserService {
       .getRawMany();
 
     return roles;
-  }
-
-  private async hashPassword(password: string): Promise<string> {
-    const saltRounds = 10;
-    return bcrypt.hash(password, saltRounds);
   }
 
   async findRoleByIdUser(idUser: number): Promise<string> {

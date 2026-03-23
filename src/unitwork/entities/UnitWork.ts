@@ -3,19 +3,16 @@ import { Neighborhoods } from './Neighborhoods';
 import { Projects } from '../../project/entities/Projects';
 
 @Index('unit_work_pkey', ['idUnitWork'], { unique: true })
-@Index('unique_project_neighborhood', ['neighborhoodId', 'projectId'], {
-  unique: true,
-})
 @Entity('unit_work', { schema: 'public' })
 export class UnitWork {
   @PrimaryGeneratedColumn({ type: 'integer', name: 'id_unit_work' })
   idUnitWork: number;
 
-  @Column('integer', { name: 'project_id', unique: true })
-  projectId: number;
+  @Column('integer', { name: 'project_id', nullable: true })
+  projectId: number | null;
 
-  @Column('integer', { name: 'neighborhood_id', unique: true })
-  neighborhoodId: number;
+  @Column('integer', { name: 'neighborhood_id', nullable: true })
+  neighborhoodId: number | null;
 
   @Column('integer', { name: 'cabling', default: () => '0' })
   cabling: number;

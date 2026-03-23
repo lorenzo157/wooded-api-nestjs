@@ -15,17 +15,28 @@ async function bootstrap() {
   app.use((req, res, next) => {
     const start = Date.now();
     res.on('finish', () => {
+      if (req.method === 'OPTIONS') return;
       const duration = Date.now() - start;
-      const user = req.user?.username || req.user?.email || 'anonymous';
-      logger.log(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms - user: ${user}`);
+      const userId = req.user?.idUser ?? 'anonymous';
+      logger.log(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms - user: ${userId}`);
     });
     next();
   });
 
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? 'http://localhost:3001').split(',');
+
   app.enableCors({
-    origin: '*', // or '*' to allow all origins
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, Swagger)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     methods: 'GET,POST,PUT,PATCH,DELETE',
     allowedHeaders: 'Content-Type, Authorization, ngrok-skip-browser-warning',
+    credentials: true,
   });
 
   app.useGlobalPipes(new ValidationPipe());

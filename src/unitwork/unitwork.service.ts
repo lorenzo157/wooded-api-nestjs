@@ -3,8 +3,9 @@ import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { UnitWork } from './entities/UnitWork';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ReadUnitWorkDto } from './dto/read-unitwork.dto';
+import { ReadCampaignDto } from './dto/read-campaign.dto';
 
 import { SampleDataDto } from './dto/sample-data.dto';
 import { ReadFilterDto } from '../project/dto/read-filter.dto';
@@ -17,6 +18,7 @@ export class UnitWorkService {
     @InjectRepository(UnitWork) private readonly unitWorkRepository: Repository<UnitWork>,
     @InjectRepository(Coordinates) private readonly coordinatesRepository: Repository<Coordinates>,
     @Inject(forwardRef(() => TreeService)) private readonly treeService: TreeService,
+    private readonly dataSource: DataSource,
   ) {
     this.sampleDataDto = {
       treeMeanByNeighborhood: 0,
@@ -116,104 +118,22 @@ export class UnitWorkService {
     }));
   }
 
-  async generateUnitWorksToProject(idProject: number) {
-    const neighborhoods = await this.treeService.getNeighborhoodsByProject(idProject);
-
-    for (const neighborhood of neighborhoods) {
-      const { idNeighborhood, numBlocksInNeighborhood } = neighborhood;
-
-      const findUnitWork = await this.unitWorkRepository.findOneBy({
-        projectId: idProject,
-        neighborhoodId: idNeighborhood,
-      });
-
-      if (findUnitWork) {
-        continue;
-      }
-
-      const treesInNeighborhood = await this.treeService.countTreesInNeighborhood(idProject, idNeighborhood);
-      if (!treesInNeighborhood) {
-        throw new Error(`No trees found for neighborhood ID: ${idNeighborhood}`);
-      }
-
-      // avg(treesInTheBlock) * numBlocksInNeighborhood = estimated total trees in neighborhood
-      const averageTreesInBlock = await this.treeService.getMeanTreesInBlock(idProject, idNeighborhood);
-      console.log(' averageTreesInBlock:', averageTreesInBlock);
-      const estimatedTotalTreesInNeighborhood = Math.round(averageTreesInBlock * numBlocksInNeighborhood);
-      console.log(' estimatedTotalTreesInNeighborhood:', estimatedTotalTreesInNeighborhood);
-
-      const scale = (count: number) => {
-        const result = Math.round((count / treesInNeighborhood) * estimatedTotalTreesInNeighborhood);
-        console.log(`scale(${count}) => (${count}/${treesInNeighborhood}) * ${estimatedTotalTreesInNeighborhood} = ${result}`);
-        return result;
-      };
-      const count = async (intervention: string) => {
-        const result = await this.countInterventionInUnitWork(idProject, idNeighborhood, intervention);
-        console.log(`count("${intervention}") => ${result}`);
-        return result;
-      };
-
-      const newUnitWork = this.unitWorkRepository.create({
-        projectId: idProject,
-        neighborhoodId: idNeighborhood,
-        pruningTraining: scale(await count('poda (formacion)')),
-        pruningSanitary: scale(await count('poda (sanitaria)')),
-        pruningHeightReduction: scale(await count('poda (reduccion de altura)')),
-        pruningBranchThinning: scale(await count('poda (raleo de ramas)')),
-        pruningSignClearing: scale(await count('poda (despeje de señaletica)')),
-        pruningPowerLineClearing: scale(await count('poda (despeje de conductores electricos)')),
-        pruningRootDeflectors: scale(await count('poda (radicular + uso de deflectores)')),
-        restrictAccess: scale(await count('restringir acceso')),
-        moveTarget: scale(await count('mover el blanco')),
-        cabling: scale(await count('cableado')),
-        fastening: scale(await count('sujecion')),
-        propping: scale(await count('apuntalamiento')),
-        permeableSurfaceIncreases: scale(await count('aumentar superficie permeable')),
-        fertilizations: scale(await count('fertilizacion')),
-        descompression: scale(await count('descompactado')),
-        drains: scale(await count('drenaje')),
-        extractions: scale(await count('extraccion del arbol')),
-        plantations: scale(await count('plantacion de arbol faltante')),
-        openingsPot: scale(await count('abertura de cazuela en vereda')),
-        advancedInspections: scale(await count('requiere inspeccion avanzada')),
-        campaignDescription: null,
-      });
-
-      await this.unitWorkRepository.save(newUnitWork);
-    }
-
-    return true;
-  }
-
-  async createCampaign(idUnitWork: number, campaignDescription: CreateCampaignDto) {
-    const unitwork = await this.unitWorkRepository.findOne({
-      // find u_k father
-      where: { idUnitWork: idUnitWork },
-    });
-
-    if (!unitwork) {
-      return null;
-    }
-
-    const newCampaign = this.unitWorkRepository.create({
-      projectId: unitwork.projectId,
-      neighborhoodId: unitwork.neighborhoodId,
-      campaignDescription: campaignDescription.campaignDescription,
-      unitWork_2: unitwork,
-    });
-    return this.unitWorkRepository.save(newCampaign);
-  }
-
-  async updateCampaignById(idCampaign: number, updateCampaignDto: UpdateCampaignDto) {
-    // const campaign = await this.unitWorkRepository.findOne({
-    //   where: { idUnitWork: idCampaign },
-    // });
-
-    const campaign = await this.unitWorkRepository
+  async findUnitWorkById(idUnitWork: number): Promise<ReadUnitWorkDto> {
+    const unitWork = await this.unitWorkRepository
       .createQueryBuilder('unit_work')
-      .where('unit_work.idUnitWork = :idCampaign', { idCampaign })
+      .innerJoinAndSelect('unit_work.neighborhood', 'neighborhood')
+      .innerJoinAndSelect('neighborhood.city', 'city')
+      .innerJoinAndSelect('city.province', 'province')
+      .where('unit_work.idUnitWork = :idUnitWork', { idUnitWork })
+      .andWhere('unit_work.unitWork_2 is null')
       .select([
-        'unit_work.unitWork_2.idUnitWork AS "idUnitWorkUW"',
+        'unit_work.idUnitWork AS "idUnitWork"',
+        'unit_work.projectId AS "projectId"',
+        'unit_work.neighborhoodId AS "neighborhoodId"',
+        'neighborhood.neighborhoodName AS "neighborhoodName"',
+        'neighborhood.numBlocksInNeighborhood AS "numBlocksInNeighborhood"',
+        'city.cityName AS "cityName"',
+        'province.provinceName AS "provinceName"',
         'unit_work.pruningTraining AS "pruningTraining"',
         'unit_work.pruningSanitary AS "pruningSanitary"',
         'unit_work.pruningHeightReduction AS "pruningHeightReduction"',
@@ -238,36 +158,129 @@ export class UnitWorkService {
       ])
       .getRawOne();
 
-    const idUnitWork = campaign.idUnitWorkUW;
+    if (!unitWork) {
+      throw new NotFoundException('UnitWork not found');
+    }
 
-    const unitWork = await this.unitWorkRepository
-      .createQueryBuilder('unit_work')
-      .innerJoinAndSelect('unit_work.neighborhood', 'neighborhood')
-      .where('unit_work.idUnitWork = :idUnitWork', { idUnitWork })
-      .select([
-        'unit_work.pruning_training AS "pruningTrainingUW"',
-        'unit_work.pruning_sanitary AS "pruningSanitaryUW"',
-        'unit_work.pruning_height_reduction AS "pruningHeightReductionUW"',
-        'unit_work.pruning_branch_thinning AS "pruningBranchThinningUW"',
-        'unit_work.pruning_sign_clearing AS "pruningSignClearingUW"',
-        'unit_work.pruning_power_line_clearing AS "pruningPowerLineClearingUW"',
-        'unit_work.pruning_root_deflectors AS "pruningRootDeflectorsUW"',
-        'unit_work.cabling AS "cablingUW"',
-        'unit_work.fastening AS "fasteningUW"',
-        'unit_work.propping AS "proppingUW"',
-        'unit_work.permeableSurfaceIncreases AS "permeableSurfaceIncreasesUW"',
-        'unit_work.restrictAccess AS "restrictAccessUW"',
-        'unit_work.moveTarget AS "moveTargetUW"',
-        'unit_work.fertilizations AS "fertilizationsUW"',
-        'unit_work.descompression AS "descompressionUW"',
-        'unit_work.drains AS "drainsUW"',
-        'unit_work.extractions AS "extractionsUW"',
-        'unit_work.plantations AS "plantationsUW"',
-        'unit_work.openingsPot AS "openingsPotUW"',
-        'unit_work.advancedInspections AS "advancedInspectionsUW"',
-        'unit_work.campaignDescription AS "campaignDescriptionUW"',
-      ])
-      .getRawOne();
+    return {
+      idUnitWork: unitWork.idUnitWork,
+      projectId: unitWork.projectId,
+      neighborhoodId: unitWork.neighborhoodId,
+      neighborhoodName: unitWork.neighborhoodName,
+      numBlocksInNeighborhood: unitWork.numBlocksInNeighborhood,
+      cityName: unitWork.cityName,
+      provinceName: unitWork.provinceName,
+      pruningTraining: unitWork.pruningTraining,
+      pruningSanitary: unitWork.pruningSanitary,
+      pruningHeightReduction: unitWork.pruningHeightReduction,
+      pruningBranchThinning: unitWork.pruningBranchThinning,
+      pruningSignClearing: unitWork.pruningSignClearing,
+      pruningPowerLineClearing: unitWork.pruningPowerLineClearing,
+      pruningRootDeflectors: unitWork.pruningRootDeflectors,
+      cabling: unitWork.cabling,
+      fastening: unitWork.fastening,
+      propping: unitWork.propping,
+      permeableSurfaceIncreases: unitWork.permeableSurfaceIncreases,
+      moveTarget: unitWork.moveTarget,
+      restrictAccess: unitWork.restrictAccess,
+      fertilizations: unitWork.fertilizations,
+      descompression: unitWork.descompression,
+      drains: unitWork.drains,
+      extractions: unitWork.extractions,
+      plantations: unitWork.plantations,
+      openingsPot: unitWork.openingsPot,
+      advancedInspections: unitWork.advancedInspections,
+      campaignDescription: unitWork.campaignDescription,
+    };
+  }
+
+  async generateUnitWorksToProject(idProject: number) {
+    const neighborhoods = await this.treeService.getNeighborhoodsByProject(idProject);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      for (const neighborhood of neighborhoods) {
+        const { idNeighborhood, numBlocksInNeighborhood, treesInNeighborhood, averageTreesInBlock } = neighborhood;
+
+        if (!treesInNeighborhood) {
+          throw new Error(`No trees found for neighborhood ID: ${idNeighborhood}`);
+        }
+
+        // avg(treesInTheBlock) * numBlocksInNeighborhood = estimated total trees in neighborhood
+        console.log(' averageTreesInBlock:', averageTreesInBlock);
+        const estimatedTotalTreesInNeighborhood = averageTreesInBlock * numBlocksInNeighborhood;
+        console.log(' estimatedTotalTreesInNeighborhood:', estimatedTotalTreesInNeighborhood);
+
+        const ic = await this.treeService.countAllInterventionsByNeighborhood(
+          idProject,
+          idNeighborhood,
+          treesInNeighborhood,
+          estimatedTotalTreesInNeighborhood,
+        );
+
+        const newUnitWork = queryRunner.manager.create(UnitWork, {
+          projectId: idProject,
+          neighborhoodId: idNeighborhood,
+          pruningTraining: ic['poda (formacion)'],
+          pruningSanitary: ic['poda (sanitaria)'],
+          pruningHeightReduction: ic['poda (reduccion de altura)'],
+          pruningBranchThinning: ic['poda (raleo de ramas)'],
+          pruningSignClearing: ic['poda (despeje de señaletica)'],
+          pruningPowerLineClearing: ic['poda (despeje de conductores electricos)'],
+          pruningRootDeflectors: ic['poda (radicular + uso de deflectores)'],
+          restrictAccess: ic['restringir acceso'],
+          moveTarget: ic['mover el blanco'],
+          cabling: ic['cableado'],
+          fastening: ic['sujecion'],
+          propping: ic['apuntalamiento'],
+          permeableSurfaceIncreases: ic['aumentar superficie permeable'],
+          fertilizations: ic['fertilizacion'],
+          descompression: ic['descompactado'],
+          drains: ic['drenaje'],
+          extractions: ic['extraccion del arbol'],
+          plantations: ic['plantacion de arbol faltante'],
+          openingsPot: ic['abertura de cazuela en vereda'],
+          advancedInspections: ic['requiere inspeccion avanzada'],
+          campaignDescription: null,
+        });
+
+        await queryRunner.manager.save(newUnitWork);
+      }
+
+      await queryRunner.commitTransaction();
+      return true;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async createCampaign(idUnitWork: number, campaignDescription: CreateCampaignDto) {
+    const unitwork = await this.unitWorkRepository.findOne({
+      // find u_k father
+      where: { idUnitWork: idUnitWork },
+    });
+
+    if (!unitwork) {
+      return null;
+    }
+
+    const newCampaign = this.unitWorkRepository.create({
+      campaignDescription: campaignDescription.campaignDescription,
+      unitWork_2: unitwork,
+    });
+    return this.unitWorkRepository.save(newCampaign);
+  }
+
+  async updateCampaignById(idCampaign: number, updateCampaignDto: UpdateCampaignDto) {
+    const campaign = await this.unitWorkRepository.findOne({
+      where: { idUnitWork: idCampaign },
+    });
 
     if (!campaign) {
       throw new NotFoundException('Campaign not found');
@@ -297,42 +310,33 @@ export class UnitWorkService {
       advancedInspections,
     } = updateCampaignDto;
 
-    // Returns current + increment if increment is provided and doesn't exceed the UW limit; otherwise keeps current
-    const clampedAdd = (current: number, increment: number | undefined, limit: number): number => {
+    const add = (current: number, increment: number): number => {
       if (!increment) return current;
-      return current + increment <= limit ? (current || 0) + increment : current;
+      return (current || 0) + increment;
     };
 
     const partialUpdate = {
-      ...(campaignDescription && { campaignDescription }),
-      pruningTraining: clampedAdd(campaign.pruningTraining, pruningTraining, unitWork.pruningTrainingUW),
-      pruningSanitary: clampedAdd(campaign.pruningSanitary, pruningSanitary, unitWork.pruningSanitaryUW),
-      pruningHeightReduction: clampedAdd(campaign.pruningHeightReduction, pruningHeightReduction, unitWork.pruningHeightReductionUW),
-      pruningBranchThinning: clampedAdd(campaign.pruningBranchThinning, pruningBranchThinning, unitWork.pruningBranchThinningUW),
-      pruningSignClearing: clampedAdd(campaign.pruningSignClearing, pruningSignClearing, unitWork.pruningSignClearingUW),
-      pruningPowerLineClearing: clampedAdd(
-        campaign.pruningPowerLineClearing,
-        pruningPowerLineClearing,
-        unitWork.pruningPowerLineClearingUW,
-      ),
-      pruningRootDeflectors: clampedAdd(campaign.pruningRootDeflectors, pruningRootDeflectors, unitWork.pruningRootDeflectorsUW),
-      cabling: clampedAdd(campaign.cabling, cabling, unitWork.cablingUW),
-      fastening: clampedAdd(campaign.fastening, fastening, unitWork.fasteningUW),
-      propping: clampedAdd(campaign.propping, propping, unitWork.proppingUW),
-      permeableSurfaceIncreases: clampedAdd(
-        campaign.permeableSurfaceIncreases,
-        permeableSurfaceIncreases,
-        unitWork.permeableSurfaceIncreasesUW,
-      ),
-      moveTarget: clampedAdd(campaign.moveTarget, moveTarget, unitWork.moveTargetUW),
-      restrictAccess: clampedAdd(campaign.restrictAccess, restrictAccess, unitWork.restrictAccessUW),
-      fertilizations: clampedAdd(campaign.fertilizations, fertilizations, unitWork.fertilizationsUW),
-      descompression: clampedAdd(campaign.descompression, descompression, unitWork.descompressionUW),
-      drains: clampedAdd(campaign.drains, drains, unitWork.drainsUW),
-      extractions: clampedAdd(campaign.extractions, extractions, unitWork.extractionsUW),
-      plantations: clampedAdd(campaign.plantations, plantations, unitWork.plantationsUW),
-      openingsPot: clampedAdd(campaign.openingsPot, openingsPot, unitWork.openingsPotUW),
-      advancedInspections: clampedAdd(campaign.advancedInspections, advancedInspections, unitWork.advancedInspectionsUW),
+      campaignDescription,
+      pruningTraining: add(campaign.pruningTraining, pruningTraining),
+      pruningSanitary: add(campaign.pruningSanitary, pruningSanitary),
+      pruningHeightReduction: add(campaign.pruningHeightReduction, pruningHeightReduction),
+      pruningBranchThinning: add(campaign.pruningBranchThinning, pruningBranchThinning),
+      pruningSignClearing: add(campaign.pruningSignClearing, pruningSignClearing),
+      pruningPowerLineClearing: add(campaign.pruningPowerLineClearing, pruningPowerLineClearing),
+      pruningRootDeflectors: add(campaign.pruningRootDeflectors, pruningRootDeflectors),
+      cabling: add(campaign.cabling, cabling),
+      fastening: add(campaign.fastening, fastening),
+      propping: add(campaign.propping, propping),
+      permeableSurfaceIncreases: add(campaign.permeableSurfaceIncreases, permeableSurfaceIncreases),
+      moveTarget: add(campaign.moveTarget, moveTarget),
+      restrictAccess: add(campaign.restrictAccess, restrictAccess),
+      fertilizations: add(campaign.fertilizations, fertilizations),
+      descompression: add(campaign.descompression, descompression),
+      drains: add(campaign.drains, drains),
+      extractions: add(campaign.extractions, extractions),
+      plantations: add(campaign.plantations, plantations),
+      openingsPot: add(campaign.openingsPot, openingsPot),
+      advancedInspections: add(campaign.advancedInspections, advancedInspections),
     };
 
     const result = await this.unitWorkRepository.update(idCampaign, partialUpdate);
@@ -344,38 +348,12 @@ export class UnitWorkService {
     return this.unitWorkRepository.findOne({ where: { idUnitWork: idCampaign } });
   }
 
-  async getTreesByUnitWork(idUnitWork: number) {
-    const treesOfUnitWork = await this.unitWorkRepository
-      .createQueryBuilder('unit_work')
-      .innerJoinAndSelect('unit_work.project', 'project')
-      .innerJoinAndSelect('project.tree', 'tree')
-      .innerJoinAndSelect('tree.neighborhood', 'neighborhood')
-      .innerJoinAndSelect('tree.coordinate', 'coordinate')
-      .where('unit_work.idUnitWork = :idUnitWork', { idUnitWork })
-      .andWhere('neighborhood.idNeighborhood = unit_work.neighborhoodId')
-      .andWhere('unit_work.unitWork_2 is null')
-      .select([
-        'tree.idTree AS "idTree"',
-        'tree.address AS "address"',
-        'tree.datetime AS "datetime"',
-        'coordinate.longitude AS "longitude"',
-        'coordinate.latitude AS "latitude"',
-      ])
-      .getRawMany();
-    return treesOfUnitWork;
-  }
-
-  async findAllCampaignsByUnitWork(idUnitWork: number): Promise<ReadUnitWorkDto[]> {
+  async findAllCampaignsByUnitWork(idUnitWork: number): Promise<ReadCampaignDto[]> {
     const unitWorks = await this.unitWorkRepository
       .createQueryBuilder('unit_work')
-      .innerJoinAndSelect('unit_work.neighborhood', 'neighborhood')
-      .where('unit_work.unitWork_2.idUnitWork = :idUnitWork', { idUnitWork })
-      .andWhere('unit_work.unitWork_2 is not null')
+      .where('unit_work.unitWork_2 = :idUnitWork', { idUnitWork })
       .select([
         'unit_work.idUnitWork AS "idUnitWork"',
-        'unit_work.projectId AS "projectId"',
-        'unit_work.neighborhoodId AS "neighborhoodId"',
-        'neighborhood.neighborhoodName AS "neighborhoodName"',
         'unit_work.pruningTraining AS "pruningTraining"',
         'unit_work.pruningSanitary AS "pruningSanitary"',
         'unit_work.pruningHeightReduction AS "pruningHeightReduction"',
@@ -383,7 +361,6 @@ export class UnitWorkService {
         'unit_work.pruningSignClearing AS "pruningSignClearing"',
         'unit_work.pruningPowerLineClearing AS "pruningPowerLineClearing"',
         'unit_work.pruningRootDeflectors AS "pruningRootDeflectors"',
-
         'unit_work.cabling AS "cabling"',
         'unit_work.propping AS "propping"',
         'unit_work.fastening AS "fastening"',
@@ -399,14 +376,11 @@ export class UnitWorkService {
         'unit_work.advancedInspections AS "advancedInspections"',
         'unit_work.campaignDescription AS "campaignDescription"',
       ])
-      .orderBy('unit_work.idUnitWork', 'ASC') // Ordenar por idUnitWork de forma ascendente
+      .orderBy('unit_work.idUnitWork', 'ASC')
       .getRawMany();
 
     return unitWorks.map((unitWork) => ({
       idUnitWork: unitWork.idUnitWork,
-      projectId: unitWork.projectId,
-      neighborhoodId: unitWork.neighborhoodId,
-      neighborhoodName: unitWork.neighborhoodName,
       pruningTraining: unitWork.pruningTraining,
       pruningSanitary: unitWork.pruningSanitary,
       pruningHeightReduction: unitWork.pruningHeightReduction,
@@ -432,109 +406,47 @@ export class UnitWorkService {
   }
 
   async calculateDataOfUnitWorkThroughCampaigns(idUnitWork: number): Promise<ReadUnitWorkDto> {
-    const unitWorkOld = await this.unitWorkRepository.findOne({
-      where: { idUnitWork: idUnitWork },
+    const unitWork = await this.unitWorkRepository.findOne({
+      where: { idUnitWork },
       relations: ['neighborhood'],
     });
 
-    let pruningTrainingSum = 0;
-    let pruningSanitarySum = 0;
-    let pruningHeightReductionSum = 0;
-    let pruningBranchThinningSum = 0;
-    let pruningSignClearingSum = 0;
-    let pruningPowerLineClearingSum = 0;
-    let pruningRootDeflectorsSum = 0;
-    let cablingSum = 0;
-    let fasteningSum = 0;
-    let proppingSum = 0;
-    let permeableSurfaceIncreasesSum = 0;
-    let restrictAccessSum = 0;
-    let moveTargetSum = 0;
-    let fertilizationsSum = 0;
-    let descompressionSum = 0;
-    let drainsSum = 0;
-    let extractionsSum = 0;
-    let plantationsSum = 0;
-    let openingsPotSum = 0;
-    let advancedInspectionsSum = 0;
-
-    // Sum all attributes of campaigns
     const campaigns = await this.findAllCampaignsByUnitWork(idUnitWork);
 
-    campaigns.forEach((campaign) => {
-      pruningTrainingSum += campaign.pruningTraining;
-      pruningSanitarySum += campaign.pruningSanitary;
-      pruningHeightReductionSum += campaign.pruningHeightReduction;
-      pruningBranchThinningSum += campaign.pruningBranchThinning;
-      pruningSignClearingSum += campaign.pruningSignClearing;
-      pruningPowerLineClearingSum += campaign.pruningPowerLineClearing;
-      pruningRootDeflectorsSum += campaign.pruningRootDeflectors;
+    type NumericField = keyof Omit<ReadCampaignDto, 'idUnitWork' | 'campaignDescription'>;
+    const numericFields: NumericField[] = [
+      'pruningTraining',
+      'pruningSanitary',
+      'pruningHeightReduction',
+      'pruningBranchThinning',
+      'pruningSignClearing',
+      'pruningPowerLineClearing',
+      'pruningRootDeflectors',
+      'cabling',
+      'fastening',
+      'propping',
+      'permeableSurfaceIncreases',
+      'restrictAccess',
+      'moveTarget',
+      'fertilizations',
+      'descompression',
+      'drains',
+      'extractions',
+      'plantations',
+      'openingsPot',
+      'advancedInspections',
+    ];
 
-      cablingSum += campaign.cabling;
-      fasteningSum += campaign.fastening;
-      proppingSum += campaign.propping;
-      permeableSurfaceIncreasesSum += campaign.permeableSurfaceIncreases;
-      restrictAccessSum += campaign.restrictAccess;
-      moveTargetSum += campaign.moveTarget;
-      fertilizationsSum += campaign.fertilizations;
-      descompressionSum += campaign.descompression;
-      drainsSum += campaign.drains;
-      extractionsSum += campaign.extractions;
-      plantationsSum += campaign.plantations;
-      openingsPotSum += campaign.openingsPot;
-      advancedInspectionsSum += campaign.advancedInspections;
-    });
+    const remaining = (field: NumericField) => unitWork[field] - campaigns.reduce((sum, c) => sum + c[field], 0);
 
-    pruningTrainingSum = Math.max(0, unitWorkOld.pruningTraining - pruningTrainingSum);
-    pruningSanitarySum = Math.max(0, unitWorkOld.pruningSanitary - pruningSanitarySum);
-    pruningHeightReductionSum = Math.max(0, unitWorkOld.pruningHeightReduction - pruningHeightReductionSum);
-    pruningBranchThinningSum = Math.max(0, unitWorkOld.pruningBranchThinning - pruningBranchThinningSum);
-    pruningSignClearingSum = Math.max(0, unitWorkOld.pruningSignClearing - pruningSignClearingSum);
-    pruningPowerLineClearingSum = Math.max(0, unitWorkOld.pruningPowerLineClearing - pruningPowerLineClearingSum);
-    pruningRootDeflectorsSum = Math.max(0, unitWorkOld.pruningRootDeflectors - pruningRootDeflectorsSum);
-    cablingSum = Math.max(0, unitWorkOld.cabling - cablingSum);
-    fasteningSum = Math.max(0, unitWorkOld.fastening - fasteningSum);
-    proppingSum = Math.max(0, unitWorkOld.propping - proppingSum);
-    permeableSurfaceIncreasesSum = Math.max(0, unitWorkOld.permeableSurfaceIncreases - permeableSurfaceIncreasesSum);
-    restrictAccessSum = Math.max(0, unitWorkOld.restrictAccess - restrictAccessSum);
-    moveTargetSum = Math.max(0, unitWorkOld.moveTarget - moveTargetSum);
-    fertilizationsSum = Math.max(0, unitWorkOld.fertilizations - fertilizationsSum);
-    descompressionSum = Math.max(0, unitWorkOld.descompression - descompressionSum);
-    drainsSum = Math.max(0, unitWorkOld.drains - drainsSum);
-    extractionsSum = Math.max(0, unitWorkOld.extractions - extractionsSum);
-    plantationsSum = Math.max(0, unitWorkOld.plantations - plantationsSum);
-    openingsPotSum = Math.max(0, unitWorkOld.openingsPot - openingsPotSum);
-    advancedInspectionsSum = Math.max(0, unitWorkOld.advancedInspections - advancedInspectionsSum);
-
-    const updateDto: ReadUnitWorkDto = {
-      idUnitWork: unitWorkOld.idUnitWork,
-      projectId: unitWorkOld.projectId,
-      neighborhoodId: unitWorkOld.neighborhoodId,
-      neighborhoodName: unitWorkOld.neighborhood.neighborhoodName,
-      pruningTraining: pruningTrainingSum,
-      pruningSanitary: pruningSanitarySum,
-      pruningHeightReduction: pruningHeightReductionSum,
-      pruningBranchThinning: pruningBranchThinningSum,
-      pruningSignClearing: pruningSignClearingSum,
-      pruningPowerLineClearing: pruningPowerLineClearingSum,
-      pruningRootDeflectors: pruningRootDeflectorsSum,
-      cabling: cablingSum,
-      fastening: fasteningSum,
-      propping: proppingSum,
-      permeableSurfaceIncreases: permeableSurfaceIncreasesSum,
-      moveTarget: moveTargetSum,
-      restrictAccess: restrictAccessSum,
-      fertilizations: fertilizationsSum,
-      descompression: descompressionSum,
-      drains: drainsSum,
-      extractions: extractionsSum,
-      plantations: plantationsSum,
-      openingsPot: openingsPotSum,
-      advancedInspections: advancedInspectionsSum,
-      campaignDescription: unitWorkOld.campaignDescription,
-    };
-
-    return updateDto;
+    return {
+      idUnitWork: unitWork.idUnitWork,
+      projectId: unitWork.projectId,
+      neighborhoodId: unitWork.neighborhoodId,
+      neighborhoodName: unitWork.neighborhood.neighborhoodName,
+      campaignDescription: unitWork.campaignDescription,
+      ...Object.fromEntries(numericFields.map((f) => [f, remaining(f)])),
+    } as ReadUnitWorkDto;
   }
 
   async savePercentages(treeQty: number, updateDto: ReadUnitWorkDto) {
@@ -561,17 +473,12 @@ export class UnitWorkService {
     return this.sampleDataDto;
   }
 
-  async getCampaignById(idCampaign: number): Promise<ReadUnitWorkDto> {
+  async getCampaignById(idCampaign: number): Promise<ReadCampaignDto> {
     const campaign = await this.unitWorkRepository
       .createQueryBuilder('unit_work')
-      .innerJoinAndSelect('unit_work.neighborhood', 'neighborhood')
       .where('unit_work.idUnitWork = :idCampaign', { idCampaign })
-      .andWhere('unit_work.unitWork_2 is not null')
       .select([
         'unit_work.idUnitWork AS "idUnitWork"',
-        'unit_work.projectId AS "projectId"',
-        'unit_work.neighborhoodId AS "neighborhoodId"',
-        'neighborhood.neighborhoodName AS "neighborhoodName"',
         'unit_work.pruningTraining AS "pruningTraining"',
         'unit_work.pruningSanitary AS "pruningSanitary"',
         'unit_work.pruningHeightReduction AS "pruningHeightReduction"',
@@ -598,11 +505,8 @@ export class UnitWorkService {
       return null;
     }
 
-    const campaignDto: ReadUnitWorkDto = {
+    const campaignDto: ReadCampaignDto = {
       idUnitWork: campaign.idUnitWork,
-      projectId: campaign.projectId,
-      neighborhoodId: campaign.neighborhoodId,
-      neighborhoodName: campaign.neighborhoodName,
       cabling: campaign.cabling,
       fastening: campaign.fastening,
       propping: campaign.propping,
@@ -634,12 +538,6 @@ export class UnitWorkService {
       return null;
     }
     return this.unitWorkRepository.delete(idCampaign);
-  }
-
-  // Obtain intervention info by project and neighborhood
-
-  private async countInterventionInUnitWork(idProject: number, idNeighborhood: number, interventionName: string): Promise<number> {
-    return this.treeService.countTreesByIntervention(idProject, idNeighborhood, interventionName);
   }
 
   async getTreesQtyPopulationInNeighborhoodUW(idUnitWork: number, idProject: number) {

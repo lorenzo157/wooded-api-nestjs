@@ -1,15 +1,18 @@
-import { Controller, Get, Post, Body, Param, Delete, Put, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Put, Query, Request } from '@nestjs/common';
 import { TreeService } from './tree.service';
 import { CreateTreeDto } from './dto/create-tree.dto';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../auth/role/role.decorator';
 
 @ApiTags('Tree')
+@Roles('administrador', 'gestor')
 @Controller('project/:idProject/tree')
 export class TreeController {
   constructor(private readonly treeService: TreeService) {}
 
   // CREATE a new tree for a specific project
   @ApiOperation({ summary: '#M101: Crea un nuevo arbol para un proyecto específico' })
+  @Roles('administrador', 'gestor', 'inspector')
   @Post()
   async createTree(@Body() createTreeDto: CreateTreeDto) {
     return this.treeService.createTree(createTreeDto);
@@ -17,9 +20,14 @@ export class TreeController {
 
   // READ, Fetch all trees associated with a specific project, but only general atributes not specific
   @ApiOperation({ summary: '#M102: Busca todos los árboles por ID de Proyecto' })
+  @Roles('administrador', 'gestor', 'inspector')
   @Get()
-  async findAllTreesByIdProject(@Param('idProject') idProject: number, @Query('idUnitWork') idUnitWork?: number) {
-    return this.treeService.findAllTreesByIdProject(idProject, idUnitWork);
+  async findAllTreesByIdProject(
+    @Param('idProject') idProject: number,
+    @Query('idUnitWork') idUnitWork: number,
+    @Request() req: { user: { idUser: number; role: string } },
+  ) {
+    return this.treeService.findAllTreesByIdProject(idProject, idUnitWork, req.user.idUser, req.user.role);
   }
 
   @ApiOperation({ summary: '#M103: Obtener las coordenadas de los árboles por ID de Proyecto' })
@@ -30,12 +38,14 @@ export class TreeController {
 
   // READ, Fetch a specific tree with all the properties includes relationship by idTree
   @ApiOperation({ summary: '#M104: Obtiene un árbol por ID' })
+  @Roles('administrador', 'gestor', 'inspector')
   @Get(':idTree')
   async getTreeById(@Param('idTree') idTree: number) {
     return this.treeService.findTreeById(idTree);
   }
 
   @ApiOperation({ summary: '#M105: Actualiza un  arbol por ID' })
+  @Roles('administrador', 'gestor', 'inspector')
   @Put(':idTree')
   async updateTreeById(@Param('idTree') idTree: number, @Body() updateTreeDto: CreateTreeDto) {
     return this.treeService.updateTreeById(idTree, updateTreeDto); // Convert id to number and pass it to the service
@@ -66,7 +76,6 @@ export class TreeController {
     @Body() body: { filters: Record<string, string[]>; neighborhoodIds?: number[] },
   ) {
     const result = await this.treeService.getFilteredTrees(idProject, body.filters ?? {}, body.neighborhoodIds);
-    console.log('🚀 ~ TreeController ~ getFilteredTrees ~ result:', result);
     return result;
   }
 }

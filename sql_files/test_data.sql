@@ -55,7 +55,7 @@
   "address": "123 Main St",
   "cityName": "Santa Fe",
   "provinceName": "Santa Fe",
-  "roleName": "Administrador"
+  "roleName": "administrador"
 }
 {
   "email": "lorenzito@example.com",
@@ -80,7 +80,7 @@ INSERT INTO cities (city_name,province_id) VALUES
 INSERT INTO neighborhoods (neighborhood_name, neighborhood_metres, city_id) VALUES   
 ('Candioti',10000,1);
 
-INSERT INTO roles (role_name) VALUES ('Administrador');
+INSERT INTO roles (role_name) VALUES ('administrador');
 
 INSERT INTO projects (project_name, project_description, start_date, end_date, project_type, city_id, user_id) VALUES 
 ('Proyecto de Reforestación', 'Reforestación en zonas rurales', '2023-01-01', '2024-01-01', TRUE, 1, 1);

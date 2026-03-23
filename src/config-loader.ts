@@ -15,4 +15,5 @@ export class EnvVars {
   public static fileStorageType = 'FILE_STORAGE_TYPE'; // 's3' or 'local'
   public static localStoragePath = 'LOCAL_STORAGE_PATH'; // Path for local file storage
   public static baseUrl = 'BASE_URL'; // Base URL for serving local files
+  public static passwordPepper = 'PASSWORD_PEPPER';
 }

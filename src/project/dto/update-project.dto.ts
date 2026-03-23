@@ -3,4 +3,6 @@ export class UpdateProjectDto {
   projectDescription: string;
   startDate: string;
   endDate: string;
+  cityName: string;
+  provinceName: string;
 }

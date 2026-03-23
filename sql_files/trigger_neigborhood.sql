@@ -121,7 +121,6 @@ $$ LANGUAGE plpgsql;
 --////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 CREATE OR REPLACE FUNCTION determine_tree_neighborhoods(
-    city_id_input INTEGER,
     latitude_input DOUBLE PRECISION,
     longitude_input DOUBLE PRECISION
 )
@@ -138,14 +137,12 @@ DECLARE
 
     -- Cursor to loop through neighborhoods
     neighborhood_cursor CURSOR FOR
-    SELECT 
+    SELECT
         n.id_neighborhood,
         json_agg(json_build_object('latitude', c.latitude, 'longitude', c.longitude)) AS coordinates
     FROM neighborhoods n
     INNER JOIN coordinates c ON n.id_neighborhood = c.neighborhood_id
-    INNER JOIN cities ci ON n.city_id = ci.id_city
-    GROUP BY n.id_neighborhood
-	HAVING n.city_id = city_id_input;
+    GROUP BY n.id_neighborhood;
 
 BEGIN
     -- Convert input latitude and longitude to X, Y
@@ -187,19 +184,14 @@ DECLARE
     latitude_input DOUBLE PRECISION;
     longitude_input DOUBLE PRECISION;
     id_neighborhood_output INTEGER;
-    id_city_input INTEGER;
 BEGIN
     -- Obtener latitud y longitud de la tabla coordinates basada en coordinates_id
     SELECT c.latitude, c.longitude INTO latitude_input, longitude_input
     FROM coordinates c
     WHERE c.id_coordinate = NEW.coordinate_id;
 
-    SELECT c.id_city INTO id_city_input FROM projects p
-    INNER JOIN cities c ON p.city_id = c.id_city
-    WHERE p.id_project = NEW.project_id;
-
     SELECT id_neighborhood INTO id_neighborhood_output
-    FROM determine_tree_neighborhoods(id_city_input, latitude_input, longitude_input);
+    FROM determine_tree_neighborhoods(latitude_input, longitude_input);
 
     UPDATE trees
     SET neighborhood_id = id_neighborhood_output

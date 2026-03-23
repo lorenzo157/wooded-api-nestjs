@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS unit_work (
     createAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_project FOREIGN KEY (project_id) REFERENCES projects(id_project),
     CONSTRAINT fk_neighborhood FOREIGN KEY (neighborhood_id) REFERENCES neighborhoods(id_neighborhood),
-    CONSTRAINT fk_unit_work FOREIGN KEY (unit_work_id) REFERENCES unit_work(id_unit_work),
+    CONSTRAINT fk_unit_work FOREIGN KEY (unit_work_id) REFERENCES unit_work(id_unit_work) ON DELETE CASCADE,
     CONSTRAINT unique_project_neighborhood UNIQUE (project_id, neighborhood_id)
 );
 
@@ -265,6 +265,12 @@ CREATE TABLE IF NOT EXISTS defect_tree (
 COMMIT;
 
 
+INSERT INTO roles (role_name) VALUES
+('administrador'),
+('gestor'),
+('inspector')
+ON CONFLICT (role_name) DO NOTHING;
+
 INSERT INTO conflicts (conflict_name) VALUES
 ('obstruccion visual de señaletica vial'),
 ('obstruccion de visual(transito humano y vehicular)'),
@@ -274,7 +280,8 @@ INSERT INTO conflicts (conflict_name) VALUES
 ('transformadores'),
 ('rotura de veredas'),
 ('luminarias a menos de 3m'),
-('rotura de desagues');
+('rotura de desagues')
+ON CONFLICT (conflict_name) DO NOTHING;
 
 
 INSERT INTO interventions (intervention_name) VALUES
@@ -297,7 +304,8 @@ INSERT INTO interventions (intervention_name) VALUES
 ('poda (raleo de ramas)'),
 ('poda (despeje de señaletica)'),
 ('poda (despeje de conductores electricos)'),
-('poda (radicular + uso de deflectores)');
+('poda (radicular + uso de deflectores)')
+ON CONFLICT (intervention_name) DO NOTHING;
 
 
 INSERT INTO defects (defect_name,defect_zone) VALUES
@@ -326,4 +334,5 @@ INSERT INTO defects (defect_name,defect_zone) VALUES
 ('ramas sobre extendidas','rama'),
 ('rajaduras de rama','rama'),
 ('pudricion de madera en ramas','rama'),
-('interferencia con red electrica','rama');
+('interferencia con red electrica','rama')
+ON CONFLICT (defect_name) DO NOTHING;

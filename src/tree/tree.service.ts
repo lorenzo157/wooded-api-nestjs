@@ -167,7 +167,10 @@ export class TreeService {
     }
   }
 
-  async findAllTreesByIdProject(idProject: number, idUnitWork?: number): Promise<SimplyReadTreeDto[]> {
+  async findAllTreesByIdProject(idProject: number, idUnitWork?: number, idUser?: number, role?: string): Promise<SimplyReadTreeDto[]> {
+    // Access check: throws ForbiddenException if role doesn't have access to this project
+    await this.projectService.findProject(idProject, idUser, role);
+
     const qb = this.treeRepository
       .createQueryBuilder('tree')
       .innerJoinAndSelect('tree.project', 'project')
@@ -795,20 +798,38 @@ export class TreeService {
     }));
   }
 
-  async getNeighborhoodsByProject(
-    idProject: number,
-  ): Promise<{ idNeighborhood: number; neighborhoodName: string; numBlocksInNeighborhood: number }[]> {
+  async getNeighborhoodsByProject(idProject: number): Promise<
+    {
+      idNeighborhood: number;
+      neighborhoodName: string;
+      numBlocksInNeighborhood: number;
+      treesInNeighborhood: number;
+      averageTreesInBlock: number;
+    }[]
+  > {
     return this.treeRepository
       .createQueryBuilder('trees')
       .innerJoin('trees.project', 'project')
       .innerJoin('trees.neighborhood', 'neighborhood')
+      .leftJoin('neighborhood.unitWorks', 'uw', 'uw.projectId = :idProject', { idProject })
       .where('project.idProject = :idProject', { idProject })
-      .select(['neighborhood.idNeighborhood AS "idNeighborhood"', 'neighborhood.numBlocksInNeighborhood AS "numBlocksInNeighborhood"'])
+      .andWhere('uw.idUnitWork IS NULL')
+      .select([
+        'neighborhood.idNeighborhood AS "idNeighborhood"',
+        'neighborhood.numBlocksInNeighborhood AS "numBlocksInNeighborhood"',
+        'COUNT(DISTINCT trees.idTree) AS "treesInNeighborhood"',
+        'AVG(trees.treesInTheBlock) AS "averageTreesInBlock"',
+      ])
       .groupBy('neighborhood.idNeighborhood')
       .getRawMany();
   }
 
-  async countTreesByIntervention(idProject: number, idNeighborhood: number, interventionName: string): Promise<number> {
+  async countAllInterventionsByNeighborhood(
+    idProject: number,
+    idNeighborhood: number,
+    treesInNeighborhood: number,
+    estimatedTotal: number,
+  ): Promise<Record<string, number>> {
     const result = await this.treeRepository
       .createQueryBuilder('tree')
       .innerJoin('tree.project', 'project')
@@ -817,10 +838,12 @@ export class TreeService {
       .innerJoin('interventionTree.intervention', 'intervention')
       .where('project.idProject = :idProject', { idProject })
       .andWhere('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
-      .andWhere('intervention.interventionName = :interventionName', { interventionName })
-      .select('COUNT(*)', 'count')
-      .getRawOne();
-    return parseInt(result?.count || '0', 10);
+      .select('intervention.interventionName', 'interventionName')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('intervention.interventionName')
+      .getRawMany();
+
+    return Object.fromEntries(result.map((r) => [r.interventionName, Math.round((r.count / treesInNeighborhood) * estimatedTotal)]));
   }
 
   async getNumBlocksInNeighborhood(idProject: number, idNeighborhood: number): Promise<number | null> {

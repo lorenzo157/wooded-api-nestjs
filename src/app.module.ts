@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { JwtAuthGuard } from './auth/jwt/jwt-auth.guard';
+import { RolesGuard } from './auth/role/role.guard';
 import { TreeModule } from './tree/tree.module';
 import { ProjectModule } from './project/project.module';
 import { UserModule } from './user/user.module';
@@ -28,6 +31,6 @@ import { LocationModule } from './location/location.module';
     LocationModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }, { provide: APP_GUARD, useClass: RolesGuard }],
 })
 export class AppModule {}

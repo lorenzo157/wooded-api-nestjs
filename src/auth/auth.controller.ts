@@ -1,17 +1,37 @@
 import { Controller, Get, Post, Request, UseGuards, Res } from '@nestjs/common';
-import { Response } from 'express';
+import { Request as Req, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './local/local-auth.guard'; // We'll create this guard to handle login
-import { JwtAuthGuard } from './jwt/jwt-auth.guard'; // Used for protecting routes
-import { Roles } from './role/role.decorator';
 import { ApiTags } from '@nestjs/swagger';
 import { JWT_COOKIE_OPTIONS } from '../utils/constants';
+import { Public } from './public.decorator';
+import { JwtService } from '@nestjs/jwt';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly jwtService: JwtService,
+  ) {}
 
+  @Public()
+  @Get('check')
+  async checkAuth(@Request() req: Req): Promise<{ authenticated: boolean }> {
+    const cookieToken = req.cookies?.access_token;
+    const authHeader = req.headers?.authorization;
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const token = cookieToken ?? bearerToken;
+    if (!token) return { authenticated: false };
+    try {
+      await this.jwtService.verifyAsync(token);
+      return { authenticated: true };
+    } catch {
+      return { authenticated: false };
+    }
+  }
+
+  @Public()
   @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(@Request() req, @Res({ passthrough: true }) res: Response) {
@@ -29,11 +49,14 @@ export class AuthController {
     };
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Roles('Administrador', 'Gestor')
-  @Get('profile')
-  async getProfile(@Request() req) {
-    return { idUser: req.user }; // Access to the user info after successful JWT validation
+  @Post('logout')
+  async logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('access_token', {
+      httpOnly: JWT_COOKIE_OPTIONS.httpOnly,
+      secure: JWT_COOKIE_OPTIONS.secure,
+      sameSite: JWT_COOKIE_OPTIONS.sameSite,
+    });
+    return { message: 'Logged out' };
   }
 
   @Get('getStatus')

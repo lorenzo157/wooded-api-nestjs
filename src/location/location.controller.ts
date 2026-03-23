@@ -2,8 +2,10 @@ import { Controller, Get, Post, Delete, Body, Param } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LocationService } from './location.service';
 import { CreateNeighborhoodDto } from '../user/dto/create-neighborhood.dto';
+import { Roles } from '../auth/role/role.decorator';
 
 @ApiTags('Location')
+@Roles('administrador', 'gestor')
 @Controller('location')
 export class LocationController {
   constructor(private readonly locationService: LocationService) {}
@@ -27,12 +29,14 @@ export class LocationController {
   }
 
   @ApiOperation({ summary: 'Crea un nuevo barrio' })
+  @Roles('administrador')
   @Post('neighborhood')
   async createNeighborhood(@Body() createNeighborhoodDto: CreateNeighborhoodDto) {
     return this.locationService.createNeighborhood(createNeighborhoodDto);
   }
 
   @ApiOperation({ summary: 'Elimina un barrio por ID (solo si no tiene unidades de trabajo)' })
+  @Roles('administrador')
   @Delete('neighborhood/:idNeighborhood')
   async removeNeighborhoodById(@Param('idNeighborhood') idNeighborhood: number) {
     return this.locationService.removeNeighborhoodById(idNeighborhood);

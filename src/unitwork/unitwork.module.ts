@@ -7,9 +7,14 @@ import { Projects } from '../project/entities/Projects';
 import { Neighborhoods } from './entities/Neighborhoods';
 import { Coordinates } from '../location/entities/Coordinates';
 import { TreeModule } from '../tree/tree.module';
+import { ProjectModule } from '../project/project.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UnitWork, Projects, Neighborhoods, Coordinates]), forwardRef(() => TreeModule)],
+  imports: [
+    TypeOrmModule.forFeature([UnitWork, Projects, Neighborhoods, Coordinates]),
+    forwardRef(() => TreeModule),
+    forwardRef(() => ProjectModule),
+  ],
   providers: [UnitWorkService],
   controllers: [UnitWorkController],
   exports: [UnitWorkService],

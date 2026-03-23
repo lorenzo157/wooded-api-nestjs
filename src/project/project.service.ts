@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import { ForbiddenException, HttpStatus, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Projects } from './entities/Projects';
@@ -32,22 +32,21 @@ export class ProjectService {
       return 'Invalid city or province';
     }
 
-    const user = await this.userService.findUserEntityById(createProjectDto.userId);
+    const user = await this.userService.findUserById(createProjectDto.userId);
 
     if (!user) {
       return 'Invalid idUser';
     }
 
-    const project = new Projects();
-    project.city = city;
-    project.endDate = createProjectDto.endDate;
-    project.projectName = createProjectDto.projectName;
-    project.startDate = createProjectDto.startDate;
-    project.projectDescription = createProjectDto.projectDescription;
-    project.projectType = createProjectDto.projectType;
-    project.user = user;
-
-    const newProject = this.projectRepository.create(project);
+    const newProject = this.projectRepository.create({
+      city,
+      user: { idUser: user.idUser },
+      endDate: createProjectDto.endDate,
+      projectName: createProjectDto.projectName,
+      startDate: createProjectDto.startDate,
+      projectDescription: createProjectDto.projectDescription,
+      projectType: createProjectDto.projectType,
+    });
 
     this.projectRepository.save(newProject);
 
@@ -58,7 +57,7 @@ export class ProjectService {
   }
 
   async findAllAssignedProjectsToUser(idUser: number): Promise<ReadProjectDto[] | string> {
-    const user = await this.userService.findUserEntityById(idUser);
+    const user = await this.userService.findUserById(idUser);
 
     if (!user) {
       return 'Invalid idUser';
@@ -94,19 +93,14 @@ export class ProjectService {
     }));
   }
 
-  async findAllCreatedProjectsByUser(idUser: number): Promise<ReadProjectDto[] | string> {
-    const user = await this.userService.findUserById(idUser);
+  async findAllCreatedProjectsByUser(idUser: number, role: string): Promise<ReadProjectDto[]> {
+    const isAdmin = role === 'administrador';
 
-    if (!user) {
-      return 'Invalid idUser';
-    }
-
-    const projects = await this.projectRepository
+    const qb = this.projectRepository
       .createQueryBuilder('project')
       .innerJoinAndSelect('project.user', 'user')
       .innerJoinAndSelect('project.city', 'projectCity')
       .innerJoinAndSelect('projectCity.province', 'projectProvince')
-      .where('user.idUser = :idUser', { idUser })
       .select([
         'project.idProject AS "idProject"',
         'project.projectName AS "projectName"',
@@ -117,8 +111,13 @@ export class ProjectService {
         'projectCity.cityName AS "cityName"',
         'projectProvince.provinceName AS "provinceName"',
       ])
-      .orderBy('project.idProject', 'ASC')
-      .getRawMany();
+      .orderBy('project.idProject', 'ASC');
+
+    if (!isAdmin) {
+      qb.where('user.idUser = :idUser', { idUser });
+    }
+
+    const projects = await qb.getRawMany();
 
     return projects.map((project) => ({
       idProject: project.idProject,
@@ -148,6 +147,7 @@ export class ProjectService {
         'user.password AS "password"',
         'user.phoneNumber AS "phoneNumber"',
         'user.address AS "address"',
+        'user.heightMeters AS "heightMeters"',
         'user.city AS "city"',
         'city.cityName AS "cityName"',
         'role.roleName AS "roleName"',
@@ -163,6 +163,7 @@ export class ProjectService {
       password: user.password,
       phoneNumber: user.phoneNumber,
       address: user.address,
+      heightMeters: user.heightMeters,
       cityName: user.cityName,
       roleName: user.roleName,
       provinceName: user.provinceName,
@@ -215,27 +216,31 @@ export class ProjectService {
   }
 
   async updateProjectById(idProject: number, updateProjectDto: UpdateProjectDto) {
-    const project = await this.findProject(idProject);
+    const entity = await this.projectRepository.findOne({ where: { idProject }, relations: ['city'] });
 
-    const { projectName, projectDescription, startDate, endDate } = updateProjectDto;
-
-    if (!project) {
+    if (!entity) {
       return null;
     }
 
-    const partialUpdate = {
-      ...(projectName && { projectName }),
-      ...(projectDescription && { projectDescription }),
-      ...(startDate && { startDate }),
-      ...(endDate && { endDate }),
-    };
-    const result = await this.projectRepository.update(idProject, partialUpdate);
+    const { projectName, projectDescription, startDate, endDate, cityName, provinceName } = updateProjectDto;
 
-    if (result.affected === 0) {
-      throw new NotFoundException('Invalid update');
+    if (cityName && provinceName) {
+      const city = await this.cityRepository.findOne({
+        where: { cityName, province: { provinceName } },
+        relations: ['province'],
+      });
+      if (!city) {
+        throw new NotFoundException('City or province not found');
+      }
+      entity.city = city;
     }
 
-    return project;
+    if (projectName) entity.projectName = projectName;
+    if (projectDescription) entity.projectDescription = projectDescription;
+    if (startDate) entity.startDate = startDate;
+    if (endDate) entity.endDate = endDate;
+
+    return this.projectRepository.save(entity);
   }
 
   async getNeighborhoodDataByProject(idProject: number) {
@@ -281,8 +286,8 @@ export class ProjectService {
     return await this.projectRepository.delete(idProject);
   }
 
-  async findProject(idProject: number): Promise<ReadProjectDto | null> {
-    const project = await this.projectRepository
+  async findProject(idProject: number, idUser?: number, role?: string): Promise<ReadProjectDto | null> {
+    const qb = this.projectRepository
       .createQueryBuilder('project')
       .innerJoinAndSelect('project.city', 'city')
       .innerJoinAndSelect('city.province', 'province')
@@ -296,12 +301,23 @@ export class ProjectService {
         'project.projectType AS "projectType"',
         'city.cityName AS "cityName"',
         'province.provinceName AS "provinceName"',
-      ])
-      .getRawOne();
+      ]);
+
+    if (role === 'gestor') {
+      qb.innerJoin('project.user', 'creator').andWhere('creator.idUser = :idUser', { idUser });
+    } else if (role === 'inspector') {
+      qb.innerJoin('project.projectUsers', 'pu').andWhere('pu.userId = :idUser', { idUser });
+    }
+
+    const project = await qb.getRawOne();
 
     if (!project) {
+      if (role === 'gestor' || role === 'inspector') {
+        throw new ForbiddenException('No tienes acceso a este proyecto');
+      }
       return null;
     }
+
     return Object.assign(new ReadProjectDto(), {
       idProject: project.idProject,
       projectName: project.projectName,

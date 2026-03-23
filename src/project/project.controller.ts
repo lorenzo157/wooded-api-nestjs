@@ -1,24 +1,15 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  //UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Request } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { ReadUserDto } from '../user/dto/read-user.dto';
 import { ReadProjectDto } from './dto/read-project.dto';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-//import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/role/role.decorator';
 
 @ApiTags('Project')
+@Roles('administrador', 'gestor')
 @Controller('project')
-//@UseGuards(JwtAuthGuard)
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
 
@@ -26,23 +17,23 @@ export class ProjectController {
 
   @ApiOperation({ summary: '#M201: Crea un nuevo proyecto' })
   @Post()
-  //@Roles('gestor', 'administrador')
   async createProject(@Body() createProjectDto: CreateProjectDto) {
     return this.projectService.createProject(createProjectDto);
   }
 
   // Endpoint to fetch all the projects that have been assigned with "inspector" user in movil aplication
   @ApiOperation({ summary: '#M202: Busca todos los proyectos asignados al ID de Usuario' })
-  @Get('assignedproject/:idUser')
-  async findAllAssignedProjectsToUser(@Param('idUser') idUser: number) {
-    return this.projectService.findAllAssignedProjectsToUser(idUser);
+  @Roles('administrador', 'gestor', 'inspector')
+  @Get('assignedproject')
+  async findAllAssignedProjectsToUser(@Request() req: { user: { idUser: number } }) {
+    return this.projectService.findAllAssignedProjectsToUser(req.user.idUser);
   }
 
   // Endpoint to fetch projects that have been created by "gestor" or "adiministrador" users in web application
   @ApiOperation({ summary: '#M203: Busca todos los proyectos creados por el ID de Usuario' })
-  @Get('createdproject/:idUser')
-  async findAllCreatedProjectsByUser(@Param('idUser') idUser: number) {
-    return this.projectService.findAllCreatedProjectsByUser(idUser);
+  @Get('createdproject')
+  async findAllCreatedProjectsByUser(@Request() req: { user: { idUser: number; role: string } }) {
+    return this.projectService.findAllCreatedProjectsByUser(req.user.idUser, req.user.role);
   }
 
   @ApiOperation({ summary: '#M204: Busca todos los usuarios asignados al Proyecto' })
@@ -52,9 +43,13 @@ export class ProjectController {
   }
 
   @ApiOperation({ summary: '#M205: Busca los datos del proyecto por ID' })
+  @Roles('administrador', 'gestor', 'inspector')
   @Get(':idProject')
-  async findProject(@Param('idProject') idProject: number): Promise<ReadProjectDto> {
-    return this.projectService.findProject(idProject);
+  async findProject(
+    @Param('idProject') idProject: number,
+    @Request() req: { user: { idUser: number; role: string } },
+  ): Promise<ReadProjectDto> {
+    return this.projectService.findProject(idProject, req.user.idUser, req.user.role);
   }
 
   @ApiOperation({ summary: '#M206: Asigna un nuevo usuario al proyecto' })

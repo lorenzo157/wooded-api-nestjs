@@ -103,7 +103,17 @@ export class LocationService {
     }
 
     if (neighborhood.unitWorks?.length > 0) {
-      throw new BadRequestException('Cannot delete neighborhood with associated unit works');
+      throw new BadRequestException('Cannot delete neighborhood: it has associated unit works');
+    }
+
+    const treeCount = await this.neighborhoodRepository
+      .createQueryBuilder('neighborhood')
+      .innerJoin('neighborhood.trees', 'tree')
+      .where('neighborhood.idNeighborhood = :idNeighborhood', { idNeighborhood })
+      .getCount();
+
+    if (treeCount > 0) {
+      throw new BadRequestException('Cannot delete neighborhood: it has associated trees');
     }
 
     await this.coordinateRepository.delete({ neighborhood: { idNeighborhood } });
